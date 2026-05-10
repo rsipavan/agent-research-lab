@@ -2,7 +2,7 @@
 
 **Designing reliable autonomous research and validation systems under uncertainty.**
 
-You DM a YouTube URL to a Telegram bot. An agent fetches the transcript, extracts the *testable* trading claim(s), runs a defined validation against real market data via the [TradingView MCP](https://github.com/), produces a structured report — thesis, what was tested, the data, the result, the caveats, a verdict — and replies. Every step is traced. Every failure mode is handled and documented.
+You DM a YouTube URL to a Telegram bot. An agent fetches the transcript, characterizes the video, extracts the *testable* trading claim(s), runs a defined validation against real market data via the TradingView MCP, produces a structured report — what the video is, the claims, what was tested, the data, the result, the caveats, a verdict — and replies. Every step is traced. Every failure mode is handled and documented.
 
 This is a small, focused system. It is deliberately small. The interesting part is not "AI watches YouTube videos" — it's the orchestration, the decision logic for *what is even testable*, the validation layer, the failure-aware workflow, and the observability trail. The pattern transfers to any autonomous-research problem; the domain here happens to be trading content.
 

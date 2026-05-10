@@ -1,6 +1,6 @@
 # Validation logic
 
-`validate.py` takes a `Claim` and produces a `ValidationRun`. It is the only module that talks to market data, and it does so through the [TradingView MCP](https://github.com/) — `symbol_search`, `data_get_ohlcv`, `data_get_indicator`, `data_get_study_values`, `quote_get`. It never holds API keys for a data vendor directly; the MCP owns that.
+`validate.py` takes a `Claim` and produces a `ValidationRun`. It is the only module that talks to market data, and it does so through the TradingView MCP — `symbol_search`, `data_get_ohlcv`, `data_get_indicator`, `data_get_study_values`, `quote_get`. It never holds API keys for a data vendor directly; the MCP owns that.
 
 ## What each test type actually does
 
