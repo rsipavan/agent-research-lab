@@ -1,0 +1,27 @@
+# env / secrets
+.env
+*.env
+!.env.example
+
+# python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+
+# runtime traces (the committed example traces under examples/ are kept;
+# ad-hoc runs land in traces/ and are ignored)
+traces/*.jsonl
+!traces/.gitkeep
+
+# editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

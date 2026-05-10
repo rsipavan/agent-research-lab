@@ -1,0 +1,30 @@
+# agent-research-lab configuration.
+# Personal/secret values go in .env, not here. This file is committed.
+
+# Which validation test types are enabled. Disabling one means claims that map
+# to it get verdict "untestable (test type disabled)".
+test_types:
+  indicator_value_over_range: true   # check an indicator's values across a date range vs the claim
+  level_zone_hit_rate: true          # check how often price respected a claimed level/zone
+  strategy_backtest: false           # NOT in v1 — needs a backtest engine; claims here are marked untestable
+
+# Defaults applied when the video doesn't specify.
+defaults:
+  timeframe: "1D"          # used if a claim doesn't name a timeframe
+  lookback_days: 365       # how far back to pull data for a range check
+  symbol_fallback: null    # if a claim names no instrument, no fallback — mark untestable
+
+# Thesis extraction.
+extraction:
+  max_claims_per_video: 3  # keep reports focused; if a video has more, take the 3 most central
+  min_confidence: 0.5      # claims the LLM rates below this confidence are downgraded to "partial"
+
+# Validation behavior.
+validation:
+  mcp_retries: 1           # retry a failed MCP call once before giving up
+  mcp_timeout_seconds: 60
+
+# Tracing.
+tracing:
+  enabled: true
+  dir: "traces"            # ad-hoc runs go here (gitignored); example runs are committed under examples/
