@@ -1,0 +1,46 @@
+{
+  "run_id": "ualY_K-TPe0-20260510T072917Z",
+  "video": {
+    "id": "ualY_K-TPe0",
+    "url": "https://www.youtube.com/watch?v=ualY_K-TPe0",
+    "title": null,
+    "channel": null
+  },
+  "verdict_overall": "untestable",
+  "overall_reason": "none of the video's claims were checkable against market data",
+  "findings": [
+    {
+      "claim_id": "c1",
+      "statement": "The RSI strategy (length 20, long on cross above 70, short on cross below 30, 200 EMA filter, ATR multiplier-2 stop loss) produced a 49.8% win rate and a net loss of 36% on the 30-minute timeframe across 10 assets from December 2022 to December 2024 (~2,700+ trades).",
+      "instrument": null,
+      "timeframe": "30m",
+      "testable": "no",
+      "test_type": "strategy_backtest",
+      "verdict": "untestable",
+      "verdict_reason": "the video makes this point but it isn't a checkable claim",
+      "validation": null
+    },
+    {
+      "claim_id": "c2",
+      "statement": "The RSI strategy produced a ~53% win rate and 172% net profit on the 1-hour timeframe across the same 10-asset portfolio over 24 months (~1,500 trades).",
+      "instrument": null,
+      "timeframe": "1H",
+      "testable": "no",
+      "test_type": "strategy_backtest",
+      "verdict": "untestable",
+      "verdict_reason": "the video makes this point but it isn't a checkable claim",
+      "validation": null
+    },
+    {
+      "claim_id": "c3",
+      "statement": "The same RSI strategy on the 30-minute timeframe produced a net profit of 61% and a 54% win rate specifically on the S&P 500 over the same 24-month test window.",
+      "instrument": "SPX",
+      "timeframe": "30m",
+      "testable": "no",
+      "test_type": "strategy_backtest",
+      "verdict": "untestable",
+      "verdict_reason": "the video makes this point but it isn't a checkable claim",
+      "validation": null
+    }
+  ]
+}

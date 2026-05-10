@@ -24,9 +24,11 @@ flowchart TD
 | Module | Input | Output | Depends on |
 |---|---|---|---|
 | `transcript.py` | `url: str` | `Transcript {video_id, title, channel, url, text, fetched_at}` | `youtube-transcript-api` |
-| `thesis.py` | `Transcript` | `ThesisSet {video_id, claims: list[Claim]}` where `Claim {id, statement, instrument, timeframe, test_type, testable: "yes"|"partial"|"no", reason_if_not, confidence}` | Anthropic API, `config.yml` (extraction) |
-| `validate.py` | `Claim` | `ValidationRun {claim_id, test_type, status: "ok"|"error"|"insufficient_data", tradingview_query, data_summary, result, caveats}` | TradingView MCP, `config.yml` (test_types, validation) |
-| `report.py` | `Transcript`, `ThesisSet`, `list[ValidationRun]` | `Report {video, claims_table, per_claim_findings, verdict_overall, markdown, json}` | Anthropic API (for the narrative synthesis only — the verdicts are computed, not LLM-judged) |
+| `thesis.py` | `Transcript` | `ThesisSet {video_id, claims: list[Claim]}` where `Claim {id, statement, instrument, timeframe, test_type, testable: "yes"|"partial"|"no", reason_if_not, confidence}` | `llm.py`, `config.yml` (extraction) |
+| `validate.py` | `Claim` | `ValidationRun {claim_id, test_type, status: "ok"|"error"|"insufficient_data", tradingview_query, data_summary, result, caveats}` | `mcp_client.py` (TradingView MCP), `config.yml` (test_types, validation) |
+| `report.py` | `Transcript`, `ThesisSet`, `list[ValidationRun]` | `Report {video, claims_table, per_claim_findings, verdict_overall, markdown, json}` | `llm.py` (narrative synthesis only — the verdicts are computed, not LLM-judged) |
+| `llm.py` | `system, prompt` | `str` | auto-detects: `claude` CLI (default, no key) → Anthropic API → Gemini API |
+| `mcp_client.py` | `tool_name, args` | `dict` | TradingView MCP (HTTP/SSE via `TRADINGVIEW_MCP_URL`); retries per config; raises `McpError` (which `validate.py` turns into an `error` ValidationRun) |
 | `orchestrate.py` | `url: str` | `Report` | all of the above; writes `traces/<run-id>.jsonl` |
 | `telegram_bot.py` | Telegram update with a YouTube URL | replies with `Report.markdown` | `orchestrate.py`, `python-telegram-bot`, `.env` (token, allowlist) |
 

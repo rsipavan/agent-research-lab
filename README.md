@@ -56,10 +56,14 @@ See [`docs/architecture.md`](docs/architecture.md). In short:
 src/agent_research_lab/
 ├── telegram_bot.py    # input/output edge: listens for YouTube URLs, replies with reports
 ├── transcript.py      # YouTube transcript fetch + clean
-├── thesis.py          # LLM: transcript → testable claims
-├── validate.py        # claim → validation run via TradingView MCP
-├── report.py          # validation runs → structured report
-└── orchestrate.py     # the sequential pipeline; logs each step to traces/
+├── thesis.py          # transcript → testable claims (via llm.py)
+├── validate.py        # claim → validation run via TradingView MCP (via mcp_client.py)
+├── report.py          # validation runs → structured report (verdicts computed, not LLM-judged)
+├── orchestrate.py     # the sequential pipeline; logs each step to traces/
+├── llm.py             # backend-agnostic LLM: claude CLI (default) | Anthropic API | Gemini API
+├── mcp_client.py      # thin TradingView MCP client (retries, error → untestable, never crashes a run)
+├── config.py          # loads config.yml + .env
+└── types.py           # the dataclasses passed between modules
 ```
 
 Each module has one job, a small typed interface, and can be tested in isolation. The data contract between them is documented in `docs/architecture.md`.
@@ -83,7 +87,16 @@ python -m agent_research_lab.orchestrate "https://www.youtube.com/watch?v=..."
 python -m agent_research_lab.telegram_bot
 ```
 
-Config: copy `.env.example` to `.env` and fill in `TELEGRAM_BOT_TOKEN`, `ANTHROPIC_API_KEY`. `config.yml` controls which test types are enabled. The TradingView MCP must be running and reachable (see `docs/validation_logic.md` for setup).
+**LLM backend — no API key required.** The pipeline needs an LLM for thesis extraction
+(and an optional report-narration step). It auto-detects, in order:
+
+1. the **`claude` CLI** on your PATH (Claude Code) — uses your existing subscription, no key needed. **This is the default.**
+2. `ANTHROPIC_API_KEY` set — Anthropic API (`pip install 'agent-research-lab[anthropic]'`)
+3. `GEMINI_API_KEY` set — Gemini API, whose free tier covers this workload (`pip install 'agent-research-lab[gemini]'`)
+
+Force a backend with `AGENT_RESEARCH_LAB_LLM={claude_cli,anthropic,gemini}`. If you have the `claude` CLI, you don't need any API key at all. See `src/agent_research_lab/llm.py`.
+
+**Other config:** copy `.env.example` → `.env`. For the Telegram listener you need `TELEGRAM_BOT_TOKEN`. For validation runs you need a running TradingView MCP — set `TRADINGVIEW_MCP_URL` to its endpoint (or leave empty and validation steps will honestly report "untestable — MCP not configured"; see `docs/validation_logic.md`). `config.yml` controls which test types are enabled.
 
 ## Examples
 

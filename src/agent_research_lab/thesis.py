@@ -18,16 +18,9 @@ from __future__ import annotations
 import json
 import time
 
+from . import llm
 from .config import Config
 from .types import Claim, ThesisSet, Transcript
-
-# anthropic SDK
-try:  # pragma: no cover - import guard
-    import anthropic
-
-    _HAVE_ANTHROPIC = True
-except Exception:  # pragma: no cover
-    _HAVE_ANTHROPIC = False
 
 
 class ExtractionError(RuntimeError):
@@ -99,12 +92,6 @@ def extract(transcript: Transcript, config: Config) -> ThesisSet:
 
 
 def _call_llm(transcript: Transcript, config: Config) -> str:
-    if not _HAVE_ANTHROPIC:  # pragma: no cover
-        raise ExtractionError("anthropic SDK not installed")
-    if not config.anthropic_api_key:
-        raise ExtractionError("ANTHROPIC_API_KEY not set")
-
-    client = anthropic.Anthropic(api_key=config.anthropic_api_key)
     user = _USER_TEMPLATE.format(
         title=transcript.title or "(unknown title)",
         channel=transcript.channel or "(unknown channel)",
@@ -117,14 +104,14 @@ def _call_llm(transcript: Transcript, config: Config) -> str:
     last_err: Exception | None = None
     for attempt in range(2):  # one retry
         try:
-            resp = client.messages.create(
-                model=config.anthropic_model,
-                max_tokens=2000,
-                system=_SYSTEM_PROMPT,
-                messages=[{"role": "user", "content": user}],
-            )
-            return "".join(block.text for block in resp.content if getattr(block, "type", "") == "text")
-        except Exception as e:  # noqa: BLE001
+            return llm.complete(_SYSTEM_PROMPT, user, model=config.anthropic_model or None, max_tokens=2000)
+        except llm.LlmUnavailable:
+            # No backend at all — not worth retrying; surface immediately.
+            raise ExtractionError(
+                "no LLM backend available — install the `claude` CLI (no key needed), "
+                "or set ANTHROPIC_API_KEY / GEMINI_API_KEY (see README)"
+            ) from None
+        except llm.LlmError as e:
             last_err = e
             if attempt == 0:
                 time.sleep(2)

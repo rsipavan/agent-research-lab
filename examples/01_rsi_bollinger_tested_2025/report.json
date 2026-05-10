@@ -1,0 +1,46 @@
+{
+  "run_id": "j2ESnjhT2no-20260510T072747Z",
+  "video": {
+    "id": "j2ESnjhT2no",
+    "url": "https://www.youtube.com/watch?v=j2ESnjhT2no",
+    "title": null,
+    "channel": null
+  },
+  "verdict_overall": "untestable",
+  "overall_reason": "none of the video's claims were checkable against market data",
+  "findings": [
+    {
+      "claim_id": "c1",
+      "statement": "The overall BB+RSI mean-reversion strategy is unreliable because no consistent profitable results were achieved across markets.",
+      "instrument": null,
+      "timeframe": null,
+      "testable": "no",
+      "test_type": "none",
+      "verdict": "untestable",
+      "verdict_reason": "This is the channel's editorial conclusion summarizing the backtest results, not a discrete falsifiable claim.",
+      "validation": null
+    },
+    {
+      "claim_id": "c2",
+      "statement": "A Bollinger Bands + RSI mean-reversion strategy \u00e2\u20ac\u201d enter long when price crosses below the lower BB and RSI is below the oversold threshold, exit when price crosses the middle BB and RSI is above the exit threshold, mirror for shorts \u00e2\u20ac\u201d applied across 100 most-liquid crypto tickers is unprofitable at every intraday timeframe from 4H to 1m, with losses growing at shorter timeframes (e.g., -$25,000 on 3m, -$370 on 4H).",
+      "instrument": "crypto (100 most liquid tickers)",
+      "timeframe": "4H, 1H, 30m, 15m, 5m, 3m, 1m",
+      "testable": "no",
+      "test_type": "strategy_backtest",
+      "verdict": "untestable",
+      "verdict_reason": "the video makes this point but it isn't a checkable claim",
+      "validation": null
+    },
+    {
+      "claim_id": "c3",
+      "statement": "The same BB+RSI mean-reversion strategy on US stocks shows positive Sharpe on 1D (1.13), 1H (2.4), and 15m (10.88) but negative Sharpe on 4H (-1.6), 30m (-7.9), 5m (-12), and 1m (~-100), with no consistent directional pattern.",
+      "instrument": "US stocks",
+      "timeframe": "1D, 4H, 1H, 30m, 15m, 5m, 1m",
+      "testable": "no",
+      "test_type": "strategy_backtest",
+      "verdict": "untestable",
+      "verdict_reason": "the video makes this point but it isn't a checkable claim",
+      "validation": null
+    }
+  ]
+}

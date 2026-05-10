@@ -8,9 +8,11 @@ license = { text = "MIT" }
 authors = [{ name = "R Sai Pavan", email = "saipavan.pilot1@gmail.com" }]
 keywords = ["agentic", "autonomous-research", "validation", "trading", "mcp", "observability"]
 
+# Core deps — no LLM SDK here. The default LLM backend is the `claude` CLI (Claude
+# Code), which needs no Python package and no API key. Install an extra below only
+# if you want the Anthropic or Gemini API backends instead.
 dependencies = [
-    "anthropic>=0.40.0",
-    "youtube-transcript-api>=0.6.2",
+    "youtube-transcript-api>=1.0",
     "python-dotenv>=1.0.1",
     "pyyaml>=6.0.2",
     "httpx>=0.27.0",
@@ -18,6 +20,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+anthropic = ["anthropic>=0.40.0"]   # for the Anthropic API LLM backend (set ANTHROPIC_API_KEY)
+gemini = ["google-generativeai>=0.8.0"]  # for the Gemini API LLM backend (set GEMINI_API_KEY; free tier covers it)
+all = ["anthropic>=0.40.0", "google-generativeai>=0.8.0"]
 dev = ["pytest>=8.0", "ruff>=0.6"]
 
 [project.scripts]

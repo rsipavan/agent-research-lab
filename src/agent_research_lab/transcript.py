@@ -13,14 +13,19 @@ from urllib.parse import parse_qs, urlparse
 
 from .types import Transcript
 
-# youtube-transcript-api is the only hard dependency here.
+# youtube-transcript-api is the only hard dependency here. Supports the 1.x API
+# (instance-based: YouTubeTranscriptApi().fetch / .list).
 try:  # pragma: no cover - import guard
     from youtube_transcript_api import (
         NoTranscriptFound,
         TranscriptsDisabled,
         YouTubeTranscriptApi,
     )
-    from youtube_transcript_api._errors import VideoUnavailable
+
+    try:
+        from youtube_transcript_api import VideoUnavailable  # 1.x re-exports it
+    except ImportError:  # pragma: no cover
+        from youtube_transcript_api._errors import VideoUnavailable
 
     _HAVE_API = True
 except Exception:  # pragma: no cover
@@ -96,31 +101,37 @@ def fetch(url: str) -> Transcript:
             text="",
         )
 
+    api = YouTubeTranscriptApi()
+    langs = ["en", "en-US", "en-GB"]
+    fetched = None
     try:
-        # Prefer manually-created English transcripts; fall back to auto-generated,
-        # then to any available transcript translated to English.
-        listing = YouTubeTranscriptApi.list_transcripts(video_id)
+        # Prefer manually-created English; fall back to auto-generated; then any
+        # transcript, translated to English if possible.
+        listing = api.list(video_id)
         transcript_obj = None
         try:
-            transcript_obj = listing.find_manually_created_transcript(["en", "en-US", "en-GB"])
+            transcript_obj = listing.find_manually_created_transcript(langs)
         except Exception:
             try:
-                transcript_obj = listing.find_generated_transcript(["en", "en-US", "en-GB"])
+                transcript_obj = listing.find_generated_transcript(langs)
             except Exception:
-                # Take whatever exists and translate to English if possible.
                 for t in listing:
-                    transcript_obj = t.translate("en") if t.is_translatable else t
+                    transcript_obj = t.translate("en") if getattr(t, "is_translatable", False) else t
                     break
         if transcript_obj is None:
             return _empty(video_id, url)
-        chunks = transcript_obj.fetch()
+        fetched = transcript_obj.fetch()
     except (TranscriptsDisabled, NoTranscriptFound, VideoUnavailable):
         return _empty(video_id, url)
     except Exception:
-        # Network hiccup, parsing change, etc. Degrade, don't crash.
-        return _empty(video_id, url)
+        # `.list` can fail on some videos / network conditions — try the simpler
+        # `.fetch` path before giving up.
+        try:
+            fetched = api.fetch(video_id, languages=langs)
+        except Exception:
+            return _empty(video_id, url)
 
-    text = _clean(" ".join(chunk.get("text", "") for chunk in chunks))
+    text = _clean(" ".join(_snippet_text(s) for s in fetched))
     return Transcript(
         video_id=video_id,
         url=url,
@@ -128,6 +139,16 @@ def fetch(url: str) -> Transcript:
         channel=None,
         text=text,
     )
+
+
+def _snippet_text(snippet) -> str:
+    # 1.x yields FetchedTranscriptSnippet objects with .text; older dict-shaped
+    # chunks have ["text"]. Be tolerant of both.
+    if hasattr(snippet, "text"):
+        return snippet.text or ""
+    if isinstance(snippet, dict):
+        return snippet.get("text", "") or ""
+    return str(snippet)
 
 
 def _empty(video_id: str, url: str) -> Transcript:

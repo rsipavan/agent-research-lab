@@ -10,6 +10,7 @@ See docs/validation_logic.md for the verdict thresholds.
 
 from __future__ import annotations
 
+from . import llm
 from .config import Config
 from .types import (
     ClaimFinding,
@@ -19,13 +20,6 @@ from .types import (
     ValidationRun,
     Verdict,
 )
-
-try:  # pragma: no cover
-    import anthropic
-
-    _HAVE_ANTHROPIC = True
-except Exception:  # pragma: no cover
-    _HAVE_ANTHROPIC = False
 
 # verdict thresholds — see docs/validation_logic.md
 _MIN_N_TO_CONCLUDE = 10
@@ -172,15 +166,17 @@ def _to_json(transcript, findings, verdict_overall, overall_reason, run_id) -> d
 def _to_markdown(transcript, findings, verdict_overall, overall_reason, config: Config) -> str:
     template = _template_markdown(transcript, findings, verdict_overall, overall_reason)
     # Try to enrich with an LLM-written summary paragraph. The verdicts/data are
-    # already in `template`; the LLM only adds a readable opening. If it fails, the
-    # template stands on its own.
-    if _HAVE_ANTHROPIC and config.anthropic_api_key:
-        try:
-            intro = _llm_intro(transcript, findings, verdict_overall, overall_reason, config)
-            if intro:
-                return intro.strip() + "\n\n---\n\n" + template
-        except Exception:  # noqa: BLE001
-            return template + "\n\n_(narrative synthesis unavailable; verdicts and data are unaffected)_\n"
+    # already in `template`; the LLM only adds a readable opening. If no backend is
+    # available or the call fails, the template stands on its own — the verdicts are
+    # computed, not LLM-generated, so they're unaffected.
+    if llm.available_backend() is None:
+        return template
+    try:
+        intro = _llm_intro(transcript, findings, verdict_overall, overall_reason, config)
+        if intro:
+            return intro.strip() + "\n\n---\n\n" + template
+    except Exception:  # noqa: BLE001
+        return template + "\n\n_(narrative synthesis unavailable; verdicts and data are unaffected)_\n"
     return template
 
 
@@ -234,7 +230,6 @@ def _template_markdown(transcript, findings, verdict_overall, overall_reason) ->
 
 
 def _llm_intro(transcript, findings, verdict_overall, overall_reason, config: Config) -> str:
-    client = anthropic.Anthropic(api_key=config.anthropic_api_key)
     summary = {
         "video": transcript.title or transcript.url,
         "overall": f"{verdict_overall} — {overall_reason}",
@@ -243,19 +238,14 @@ def _llm_intro(transcript, findings, verdict_overall, overall_reason, config: Co
             for f in findings
         ],
     }
-    resp = client.messages.create(
-        model=config.anthropic_model,
-        max_tokens=400,
-        system=(
-            "You write a 2-3 sentence opening for a research report. You are given the video, "
-            "the overall verdict, and each claim's COMPUTED verdict (do not second-guess these — "
-            "they came from market data, not from you). Write a tight, honest opening that states "
-            "what the video claimed and how it held up. No hype, no hedging boilerplate, no 'it's "
-            "important to note'. Plain and direct."
-        ),
-        messages=[{"role": "user", "content": str(summary)}],
+    system = (
+        "You write a 2-3 sentence opening for a research report. You are given the video, "
+        "the overall verdict, and each claim's COMPUTED verdict (do not second-guess these — "
+        "they came from market data, not from you). Write a tight, honest opening that states "
+        "what the video claimed and how it held up. No hype, no hedging boilerplate, no 'it's "
+        "important to note'. Plain and direct."
     )
-    return "".join(b.text for b in resp.content if getattr(b, "type", "") == "text")
+    return llm.complete(system, str(summary), model=config.anthropic_model or None, max_tokens=400)
 
 
 def _md_escape(s: str) -> str:
