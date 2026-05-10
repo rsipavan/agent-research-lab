@@ -5,10 +5,11 @@ of one run:
 
 - `input.md` — the URL and a one-line note on why this video was picked
 - `transcript.txt` — the fetched transcript
+- `summary.json` — what the agent decided the video *is* (content_type, topic, summary, has_checkable_claims) — produced by the summarize step before any claim extraction
 - `thesis.json` — the claims the agent extracted, each classified for testability
-- `report.md` — the human-readable report (this is what the Telegram bot would send back)
+- `report.md` — the human-readable report. It **leads with "What this video is"**, then the claims. This is what the Telegram bot would send back.
 - `report.json` — the structured report
-- `trace.jsonl` — the step-by-step trace: one line per pipeline step, with timing
+- `trace.jsonl` — the step-by-step trace: one line per pipeline step (`transcript.fetch` → `video.summarize` → `thesis.extract` → `validate.run`* → `report.build`), with timing
 
 Read any one `report.md` + its `trace.jsonl` to see exactly what the agent did and decided.
 

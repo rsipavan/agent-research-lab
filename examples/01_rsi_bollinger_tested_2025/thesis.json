@@ -1,19 +1,19 @@
 [
   {
     "claim_id": "c1",
-    "statement": "The overall BB+RSI mean-reversion strategy is unreliable because no consistent profitable results were achieved across markets.",
+    "statement": "When price moves sufficiently in one direction under certain conditions, it will always return to the mean.",
     "instrument": null,
     "timeframe": null,
     "testable": "no",
     "test_type": "none",
     "verdict": "untestable",
-    "verdict_reason": "This is the channel's editorial conclusion summarizing the backtest results, not a discrete falsifiable claim."
+    "verdict_reason": "No instrument, timeframe, quantified threshold, or time horizon is specified; 'always' is unfalsifiable in practice and the statement functions as narrative justification for the strategy concept, not a checkable claim."
   },
   {
     "claim_id": "c2",
-    "statement": "A Bollinger Bands + RSI mean-reversion strategy \u00e2\u20ac\u201d enter long when price crosses below the lower BB and RSI is below the oversold threshold, exit when price crosses the middle BB and RSI is above the exit threshold, mirror for shorts \u00e2\u20ac\u201d applied across 100 most-liquid crypto tickers is unprofitable at every intraday timeframe from 4H to 1m, with losses growing at shorter timeframes (e.g., -$25,000 on 3m, -$370 on 4H).",
-    "instrument": "crypto (100 most liquid tickers)",
-    "timeframe": "4H, 1H, 30m, 15m, 5m, 3m, 1m",
+    "statement": "A mean-reversion strategy entering long when price crosses below the lower Bollinger Band (default 20-period, 2 std) with RSI below an oversold threshold and exiting when price crosses the middle band with RSI above a corresponding threshold produces negative returns on the top-100-liquid crypto tickers across every timeframe from 4H down to 1-minute, and only a negligible positive result (~$70, Sharpe ~1.2) on the 1-day timeframe.",
+    "instrument": "crypto (top 100 by liquidity)",
+    "timeframe": "1m\u00e2\u20ac\u201c1D",
     "testable": "no",
     "test_type": "strategy_backtest",
     "verdict": "untestable",
@@ -21,9 +21,9 @@
   },
   {
     "claim_id": "c3",
-    "statement": "The same BB+RSI mean-reversion strategy on US stocks shows positive Sharpe on 1D (1.13), 1H (2.4), and 15m (10.88) but negative Sharpe on 4H (-1.6), 30m (-7.9), 5m (-12), and 1m (~-100), with no consistent directional pattern.",
-    "instrument": "US stocks",
-    "timeframe": "1D, 4H, 1H, 30m, 15m, 5m, 1m",
+    "statement": "The same BB+RSI mean-reversion strategy applied to the most liquid US stocks produces a small positive return on the 1-day timeframe (Sharpe ~1.13, ~$200 net profit) but loses money at most intraday timeframes.",
+    "instrument": "US stocks (most liquid)",
+    "timeframe": "1D",
     "testable": "no",
     "test_type": "strategy_backtest",
     "verdict": "untestable",

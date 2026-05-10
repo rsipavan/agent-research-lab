@@ -13,26 +13,31 @@ This is a small, focused system. It is deliberately small. The interesting part 
 ```mermaid
 flowchart LR
     A[Telegram DM<br/>YouTube URL] --> B[transcript.fetch]
-    B --> C[thesis.extract<br/>LLM → testable claims]
+    B --> S[summarize<br/>what kind of video?]
+    S --> D0{claim-bearing?}
+    D0 -- no<br/>mindset / vlog / promo --> R1[Report:<br/>what this video is<br/>+ nothing to validate]
+    D0 -- yes --> C[thesis.extract<br/>LLM → testable claims]
     C --> D{testable?}
-    D -- no --> R1[Report:<br/>untestable + reason]
-    D -- partial --> E[validate.run<br/>TradingView MCP]
-    D -- yes --> E
-    E --> F[report.build<br/>structured verdict]
+    D -- no --> R2[Report:<br/>summary + claims +<br/>why untestable]
+    D -- partial / yes --> E[validate.run<br/>TradingView MCP]
+    E --> F[report.build<br/>summary + computed verdicts]
     R1 --> G[Telegram reply]
+    R2 --> G
     F --> G
     B -.trace.-> T[(traces/run-id.jsonl)]
+    S -.trace.-> T
     C -.trace.-> T
     E -.trace.-> T
     F -.trace.-> T
 ```
 
 1. **Ingest** — `transcript.py` pulls and cleans the YouTube transcript.
-2. **Extract** — `thesis.py` runs an LLM over the transcript and extracts *testable claims* — each tagged with instrument, timeframe, test type, and whether it's actually testable (with a reason if not). Most trading videos contain opinion, narrative, or vibes; the agent's first job is honestly separating "this is a checkable claim" from "this is a take."
-3. **Validate** — `validate.py` calls the TradingView MCP (`symbol_search`, `data_get_ohlcv`, `data_get_indicator`, `data_get_study_values`) to pull the actual market data and check the claim against it. v1 supports two test types: indicator-value-over-range checks and level/zone hit-rate checks. Strategy-shaped claims that need a full backtest are honestly marked "untestable in v1 — needs a backtest engine."
-4. **Report** — `report.py` builds a structured result: `{thesis, what_was_tested, data_summary, result, caveats, verdict}` where verdict ∈ {holds, partial, fails, untestable}.
-5. **Reply** — `telegram_bot.py` posts the report back.
-6. **Trace** — every run writes `traces/<run-id>.jsonl`, one line per step. For the examples in this repo, those traces are committed so you can read the agent's reasoning trail.
+2. **Summarize** — `summarize.py` runs first and characterizes the video: strategy/backtest, educational explainer, market commentary, trader psychology, vlog, course pitch, or a mix. It writes a `content_type`, a topic, a 2-4 sentence summary, and a `has_checkable_claims` flag. If the video isn't claim-bearing by nature (psychology / vlog / promo) the pipeline stops here and returns a summary-only report — running a claim extractor over a pep-talk to find zero claims is wasted effort, and saying plainly "this is a mindset video about X" is the honest output.
+3. **Extract** — for claim-bearing videos, `thesis.py` extracts *testable claims* — each tagged with instrument, timeframe, test type, and whether it's actually testable (with a reason if not). It gets the summary as context. The agent is allowed — and expected — to say "this is a take, not a checkable claim."
+4. **Validate** — `validate.py` calls the TradingView MCP (`symbol_search`, `data_get_ohlcv`, `data_get_indicator`, `data_get_study_values`) to pull real market data and check the claim. v1 supports two test types: indicator-value-over-range checks and level/zone hit-rate checks. Strategy-shaped claims that need a full backtest are honestly marked "untestable in v1 — needs a backtest engine."
+5. **Report** — `report.py` builds the report. It **leads with "what this video is"**, then (if there were claims) a structured per-claim result: `{thesis, what_was_tested, data_summary, result, caveats, verdict}` where verdict ∈ {holds, partial, fails, untestable}. Verdicts are *computed* from the validation data, not LLM-judged.
+6. **Reply** — `telegram_bot.py` posts the report back.
+7. **Trace** — every run writes `traces/<run-id>.jsonl`, one line per step. For the examples in this repo, those traces are committed so you can read the agent's reasoning trail.
 
 ## What it deliberately does NOT do (yet)
 
@@ -56,9 +61,10 @@ See [`docs/architecture.md`](docs/architecture.md). In short:
 src/agent_research_lab/
 ├── telegram_bot.py    # input/output edge: listens for YouTube URLs, replies with reports
 ├── transcript.py      # YouTube transcript fetch + clean
-├── thesis.py          # transcript → testable claims (via llm.py)
+├── summarize.py       # transcript → "what kind of video is this?" (runs first; routes the pipeline)
+├── thesis.py          # transcript + summary → testable claims (via llm.py)
 ├── validate.py        # claim → validation run via TradingView MCP (via mcp_client.py)
-├── report.py          # validation runs → structured report (verdicts computed, not LLM-judged)
+├── report.py          # summary + validation runs → report (leads with "what this video is"; verdicts computed, not LLM-judged)
 ├── orchestrate.py     # the sequential pipeline; logs each step to traces/
 ├── llm.py             # backend-agnostic LLM: claude CLI (default) | Anthropic API | Gemini API
 ├── mcp_client.py      # thin TradingView MCP client (retries, error → untestable, never crashes a run)

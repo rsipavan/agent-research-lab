@@ -1,46 +1,79 @@
 {
-  "run_id": "ualY_K-TPe0-20260510T072917Z",
+  "run_id": "ualY_K-TPe0-20260510T074437Z",
   "video": {
     "id": "ualY_K-TPe0",
     "url": "https://www.youtube.com/watch?v=ualY_K-TPe0",
     "title": null,
     "channel": null
   },
+  "video_summary": {
+    "content_type": "strategy_or_claim",
+    "topic": "RSI strategy backtest across 4300 trades multiple assets",
+    "summary": "A backtest of an RSI-based trading strategy (RSI length 20, overbought/oversold entries, 200 EMA filter, ATR stop-loss) is run across 10 assets on 30-minute, 1-hour, and daily timeframes using 24 months of data from December 2022 to December 2024. Results show the strategy is unprofitable on the 30-minute frame (-36% net), profitable on the 1-hour frame (+172% net, 53% win rate), and marginally profitable on the daily frame (+8%). The presenter concludes the strategy lacks consistency across all conditions and recommends adding filters. The video also promotes a paid indicator testing bot and the creator's website services.",
+    "has_checkable_claims": true
+  },
   "verdict_overall": "untestable",
   "overall_reason": "none of the video's claims were checkable against market data",
   "findings": [
     {
       "claim_id": "c1",
-      "statement": "The RSI strategy (length 20, long on cross above 70, short on cross below 30, 200 EMA filter, ATR multiplier-2 stop loss) produced a 49.8% win rate and a net loss of 36% on the 30-minute timeframe across 10 assets from December 2022 to December 2024 (~2,700+ trades).",
-      "instrument": null,
+      "statement": "The RSI(20) momentum strategy (long when RSI crosses above 70, short when RSI crosses below 30, filtered by 200 EMA, ATR\u00c3\u20142 stop-loss) run on the 30-minute timeframe across BTC, ETH, XRP, three FX pairs, Gold, Oil, SPX, and AAPL from December 2022 to December 2024 produces a 49.8% win rate and -36% net result over approximately 2,700 trades.",
+      "instrument": "BTC,ETH,XRP,GOLD,OIL,SPX,AAPL,FX",
       "timeframe": "30m",
-      "testable": "no",
+      "testable": "yes",
       "test_type": "strategy_backtest",
       "verdict": "untestable",
-      "verdict_reason": "the video makes this point but it isn't a checkable claim",
-      "validation": null
+      "verdict_reason": "this is a full strategy \u2014 needs a backtest engine (not in v1)",
+      "validation": {
+        "status": "error",
+        "tradingview_query": "",
+        "data_summary": "",
+        "occurrences": null,
+        "hit_rate": null,
+        "result": "untestable \u2014 this is a full strategy \u2014 needs a backtest engine (not in v1)",
+        "caveats": [],
+        "error": "this is a full strategy \u2014 needs a backtest engine (not in v1)"
+      }
     },
     {
       "claim_id": "c2",
-      "statement": "The RSI strategy produced a ~53% win rate and 172% net profit on the 1-hour timeframe across the same 10-asset portfolio over 24 months (~1,500 trades).",
-      "instrument": null,
+      "statement": "The same RSI(20) momentum strategy on the 1-hour timeframe across the same 10 assets and date range produces approximately a 53% win rate and +172% net result over approximately 1,500 trades.",
+      "instrument": "BTC,ETH,XRP,GOLD,OIL,SPX,AAPL,FX",
       "timeframe": "1H",
-      "testable": "no",
+      "testable": "yes",
       "test_type": "strategy_backtest",
       "verdict": "untestable",
-      "verdict_reason": "the video makes this point but it isn't a checkable claim",
-      "validation": null
+      "verdict_reason": "this is a full strategy \u2014 needs a backtest engine (not in v1)",
+      "validation": {
+        "status": "error",
+        "tradingview_query": "",
+        "data_summary": "",
+        "occurrences": null,
+        "hit_rate": null,
+        "result": "untestable \u2014 this is a full strategy \u2014 needs a backtest engine (not in v1)",
+        "caveats": [],
+        "error": "this is a full strategy \u2014 needs a backtest engine (not in v1)"
+      }
     },
     {
       "claim_id": "c3",
-      "statement": "The same RSI strategy on the 30-minute timeframe produced a net profit of 61% and a 54% win rate specifically on the S&P 500 over the same 24-month test window.",
-      "instrument": "SPX",
-      "timeframe": "30m",
-      "testable": "no",
+      "statement": "The same RSI(20) momentum strategy on the daily timeframe across the same 10 assets and date range produces approximately a 53% win rate and +8% net result over approximately 58 trades.",
+      "instrument": "BTC,ETH,XRP,GOLD,OIL,SPX,AAPL,FX",
+      "timeframe": "1D",
+      "testable": "yes",
       "test_type": "strategy_backtest",
       "verdict": "untestable",
-      "verdict_reason": "the video makes this point but it isn't a checkable claim",
-      "validation": null
+      "verdict_reason": "this is a full strategy \u2014 needs a backtest engine (not in v1)",
+      "validation": {
+        "status": "error",
+        "tradingview_query": "",
+        "data_summary": "",
+        "occurrences": null,
+        "hit_rate": null,
+        "result": "untestable \u2014 this is a full strategy \u2014 needs a backtest engine (not in v1)",
+        "caveats": [],
+        "error": "this is a full strategy \u2014 needs a backtest engine (not in v1)"
+      }
     }
   ]
 }

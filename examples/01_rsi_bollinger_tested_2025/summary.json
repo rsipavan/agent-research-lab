@@ -1,0 +1,6 @@
+{
+  "content_type": "strategy_or_claim",
+  "topic": "Bollinger Bands + RSI mean-reversion strategy backtest across markets",
+  "summary": "A systematic backtest of a popular Bollinger Bands and RSI mean-reversion strategy across crypto, US stocks, futures, and forex at multiple timeframes using Python and historical OHLCV data. The strategy enters long when price crosses below the lower Bollinger Band with RSI oversold, and exits at the middle band with RSI above threshold (reverse for shorts). Results were consistently negative or negligible across most markets and timeframes, with no reliable edge found. Hyperparameter optimization produced only marginal improvements, failing to change the overall conclusion that the strategy does not work reliably.",
+  "has_checkable_claims": true
+}

@@ -1,4 +1,4 @@
-The video tested an RSI strategy (length 20, 200 EMA trend filter, ATR-2 stop loss) across a 10-asset portfolio from December 2022 to December 2024, reporting results that swung from a 36% net loss on the 30-minute timeframe to 172% net profit on the 1-hour timeframe. None of these figures could be checked against market data â€” every claim the video made fell into the untestable category, either because the exact backtest configuration could not be reproduced or because the reported outputs were not independently verifiable. The video's numbers may be accurate, but this report cannot confirm or refute them.
+The video runs an RSI(20) momentum strategy â€” long above 70, short below 30, filtered by 200 EMA with ATR-based stops â€” across 10 assets on three timeframes using 24 months of data, totaling roughly 4,300 trades. It reports a losing 30-minute frame (-36%), a winning 1-hour frame (+172%), and a marginally positive daily frame (+8%), then concludes the strategy is inconsistent and needs more filters. None of the three performance claims could be verified against market data because checking them requires a full backtest engine, so the video's numbers stand unconfirmed either way.
 
 ---
 
@@ -8,31 +8,37 @@ The video tested an RSI strategy (length 20, 200 EMA trend filter, ATR-2 stop lo
 
 _Source: https://www.youtube.com/watch?v=ualY_K-TPe0_
 
+## What this video is
+
+- **Type:** `strategy_or_claim`
+- **Topic:** RSI strategy backtest across 4300 trades multiple assets
+- **Summary:** A backtest of an RSI-based trading strategy (RSI length 20, overbought/oversold entries, 200 EMA filter, ATR stop-loss) is run across 10 assets on 30-minute, 1-hour, and daily timeframes using 24 months of data from December 2022 to December 2024. Results show the strategy is unprofitable on the 30-minute frame (-36% net), profitable on the 1-hour frame (+172% net, 53% win rate), and marginally profitable on the daily frame (+8%). The presenter concludes the strategy lacks consistency across all conditions and recommends adding filters. The video also promotes a paid indicator testing bot and the creator's website services.
+- **Has checkable market claims:** yes
+
 ## Claims
 
 | # | Claim | Testable | Test | Verdict |
 |---|---|---|---|---|
-| c1 | The RSI strategy (length 20, long on cross above 70, short on cross below 30, 200 EMA filter, ATR multiplier-2 stop loss) produced a 49.8% win rate and a net loss of 36% on the 30-minute timeframe across 10 assets from December 2022 to December 2024 (~2,700+ trades). | no | strategy_backtest | **untestable** |
-| c2 | The RSI strategy produced a ~53% win rate and 172% net profit on the 1-hour timeframe across the same 10-asset portfolio over 24 months (~1,500 trades). | no | strategy_backtest | **untestable** |
-| c3 | The same RSI strategy on the 30-minute timeframe produced a net profit of 61% and a 54% win rate specifically on the S&P 500 over the same 24-month test window. | no | strategy_backtest | **untestable** |
+| c1 | The RSI(20) momentum strategy (long when RSI crosses above 70, short when RSI crosses below 30, filtered by 200 EMA, ATRÃ—2 stop-loss) run on the 30-minute timeframe across BTC, ETH, XRP, three FX pairs, Gold, Oil, SPX, and AAPL from December 2022 to December 2024 produces a 49.8% win rate and -36% net result over approximately 2,700 trades. | yes | strategy_backtest | **untestable** |
+| c2 | The same RSI(20) momentum strategy on the 1-hour timeframe across the same 10 assets and date range produces approximately a 53% win rate and +172% net result over approximately 1,500 trades. | yes | strategy_backtest | **untestable** |
+| c3 | The same RSI(20) momentum strategy on the daily timeframe across the same 10 assets and date range produces approximately a 53% win rate and +8% net result over approximately 58 trades. | yes | strategy_backtest | **untestable** |
 
 ## Findings
 
-### c1 — The RSI strategy (length 20, long on cross above 70, short on cross below 30, 200 EMA filter, ATR multiplier-2 stop loss) produced a 49.8% win rate and a net loss of 36% on the 30-minute timeframe across 10 assets from December 2022 to December 2024 (~2,700+ trades).
+### c1 — The RSI(20) momentum strategy (long when RSI crosses above 70, short when RSI crosses below 30, filtered by 200 EMA, ATRÃ—2 stop-loss) run on the 30-minute timeframe across BTC, ETH, XRP, three FX pairs, Gold, Oil, SPX, and AAPL from December 2022 to December 2024 produces a 49.8% win rate and -36% net result over approximately 2,700 trades.
 
-- **Verdict:** untestable — the video makes this point but it isn't a checkable claim
-- **Scope:** ? · 30m
+- **Verdict:** untestable — this is a full strategy — needs a backtest engine (not in v1)
+- **Scope:** BTC,ETH,XRP,GOLD,OIL,SPX,AAPL,FX · 30m
 
-### c2 — The RSI strategy produced a ~53% win rate and 172% net profit on the 1-hour timeframe across the same 10-asset portfolio over 24 months (~1,500 trades).
+### c2 — The same RSI(20) momentum strategy on the 1-hour timeframe across the same 10 assets and date range produces approximately a 53% win rate and +172% net result over approximately 1,500 trades.
 
-- **Verdict:** untestable — the video makes this point but it isn't a checkable claim
-- **Scope:** ? · 1H
+- **Verdict:** untestable — this is a full strategy — needs a backtest engine (not in v1)
+- **Scope:** BTC,ETH,XRP,GOLD,OIL,SPX,AAPL,FX · 1H
 
-### c3 — The same RSI strategy on the 30-minute timeframe produced a net profit of 61% and a 54% win rate specifically on the S&P 500 over the same 24-month test window.
+### c3 — The same RSI(20) momentum strategy on the daily timeframe across the same 10 assets and date range produces approximately a 53% win rate and +8% net result over approximately 58 trades.
 
-- **Verdict:** untestable — the video makes this point but it isn't a checkable claim
-- **Scope:** SPX · 30m
-
+- **Verdict:** untestable — this is a full strategy — needs a backtest engine (not in v1)
+- **Scope:** BTC,ETH,XRP,GOLD,OIL,SPX,AAPL,FX · 1D
 ---
 
-_Generated by [agent-research-lab](https://github.com/) — verdicts are computed from market data via the TradingView MCP, not LLM-judged. See the trace for the step-by-step._
+_Generated by [agent-research-lab](https://github.com/) — the video is characterized first, then any checkable claims are validated against market data via the TradingView MCP. Verdicts are computed from the data, not LLM-judged. See the trace for the step-by-step._

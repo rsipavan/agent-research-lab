@@ -17,11 +17,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from . import report as report_mod
+from . import summarize as summarize_mod
 from . import thesis as thesis_mod
 from . import transcript as transcript_mod
 from . import validate as validate_mod
 from .config import Config, load_config, repo_root
 from .mcp_client import McpClient
+from .summarize import SummarizeError
 from .thesis import ExtractionError
 from .types import Report, TraceEvent
 
@@ -50,21 +52,43 @@ def process(url: str, config: Config | None = None) -> Report:
     run_id = _mint_run_id(transcript.video_id or "unknown")
     if transcript.is_empty:
         trace.append(TraceEvent("transcript.fetch", False,
-                                f"no transcript / too short ({transcript.word_count} words)",
-                                _ms(t0)))
+                                f"no transcript / too short ({transcript.word_count} words)", _ms(t0)))
         _write_trace(config, run_id, trace)
         # short-circuit to a minimal report — but DON'T abort: the user gets an honest report.
         return report_mod.build_minimal(
-            transcript, run_id,
+            transcript, None, run_id,
             reason="no transcript was available for this video (it has no captions, or the captions are too short to analyze)",
         )
-    trace.append(TraceEvent("transcript.fetch", True,
-                            f"fetched {transcript.word_count:,} words", _ms(t0)))
+    trace.append(TraceEvent("transcript.fetch", True, f"fetched {transcript.word_count:,} words", _ms(t0)))
 
-    # --- step 2: thesis extraction (load-bearing) ---
+    # --- step 2: summarize — establish what kind of video this is (load-bearing) ---
     t0 = time.perf_counter()
     try:
-        thesis = thesis_mod.extract(transcript, config)
+        summary = summarize_mod.summarize(transcript, config)
+    except SummarizeError as e:
+        trace.append(TraceEvent("video.summarize", False, f"summarize failed: {e}", _ms(t0)))
+        _write_trace(config, run_id, trace)
+        raise RunAborted("couldn't analyze the video right now — please try again in a moment.") from e
+    trace.append(TraceEvent(
+        "video.summarize", True,
+        f"{summary.content_type} — {summary.topic} (checkable claims: {'yes' if summary.has_checkable_claims else 'no'})",
+        _ms(t0),
+    ))
+
+    # If the video isn't claim-bearing by nature (mindset, vlog, promo, off-topic, or
+    # the summarizer flagged no checkable claims), we don't run extraction — the report
+    # is the summary plus an honest "nothing to validate, and why".
+    if summary.skip_extraction:
+        report = report_mod.build_summary_only(transcript, summary, run_id)
+        trace.append(TraceEvent("report.build", True,
+                                f"summary-only ({summary.content_type}); no extraction run", 0))
+        _write_trace(config, run_id, trace)
+        return report
+
+    # --- step 3: thesis extraction (load-bearing) ---
+    t0 = time.perf_counter()
+    try:
+        thesis = thesis_mod.extract(transcript, summary, config)
     except ExtractionError as e:
         trace.append(TraceEvent("thesis.extract", False, f"extraction failed: {e}", _ms(t0)))
         _write_trace(config, run_id, trace)
@@ -77,23 +101,16 @@ def process(url: str, config: Config | None = None) -> Report:
         _ms(t0),
     ))
 
-    if not thesis.claims:
-        _write_trace(config, run_id, trace)
-        return report_mod.build_minimal(
-            transcript, run_id,
-            reason="this video contains no trading claims (the agent found nothing checkable in the transcript)",
-        )
+    # No testable claims (zero claims, or all classified `no`) -> full report that
+    # leads with the summary and lists each claim and why it isn't testable.
     if not thesis.has_any_testable:
-        # We have claims but they're all `no` — build the full report (it lists each claim
-        # and why it isn't testable), not the minimal one.
-        report = report_mod.build(transcript, thesis, [], config, run_id)
+        report = report_mod.build(transcript, summary, thesis, [], config, run_id)
         trace.append(TraceEvent("report.build", True,
                                 f"verdict_overall={report.verdict_overall} (no testable claims)", 0))
         _write_trace(config, run_id, trace)
-        report.json["run_id"] = run_id
         return report
 
-    # --- step 3: validate each testable claim ---
+    # --- step 4: validate each testable claim ---
     runs = []
     with McpClient(config) as mcp:
         for claim in thesis.testable_claims:
@@ -107,14 +124,11 @@ def process(url: str, config: Config | None = None) -> Report:
                 _ms(t0), extra={"claim_id": claim.id},
             ))
 
-    # --- step 4: report ---
+    # --- step 5: report ---
     t0 = time.perf_counter()
-    report = report_mod.build(transcript, thesis, runs, config, run_id)
-    report.json["run_id"] = run_id
+    report = report_mod.build(transcript, summary, thesis, runs, config, run_id)
     trace.append(TraceEvent("report.build", True,
-                            f"verdict_overall={report.verdict_overall}; {len(report.findings)} claim(s)",
-                            _ms(t0)))
-
+                            f"verdict_overall={report.verdict_overall}; {len(report.findings)} claim(s)", _ms(t0)))
     _write_trace(config, run_id, trace)
     return report
 

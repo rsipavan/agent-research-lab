@@ -13,11 +13,12 @@ from __future__ import annotations
 import pytest
 
 from agent_research_lab import report as report_mod
+from agent_research_lab import summarize as summarize_mod
 from agent_research_lab import thesis as thesis_mod
 from agent_research_lab import validate as validate_mod
 from agent_research_lab.config import Config
 from agent_research_lab.transcript import extract_video_id
-from agent_research_lab.types import Claim, ThesisSet, Transcript, ValidationRun
+from agent_research_lab.types import Claim, ThesisSet, Transcript, ValidationRun, VideoSummary
 
 
 # --------------------------------------------------------------------------- config fixture
@@ -154,27 +155,28 @@ def _finding(verdict):
     return ClaimFinding(claim=claim, validation=None, verdict=verdict, verdict_reason="")
 
 
+def test_aggregate_empty_is_untestable():
+    v, reason = report_mod._aggregate([])
+    assert v == "untestable" and "no checkable" in reason
+
+
 def test_aggregate_all_untestable():
-    t = Transcript("v", "u", None, None, "...")
-    v, _ = report_mod._aggregate([_finding("untestable"), _finding("untestable")], t, ThesisSet("v"))
+    v, _ = report_mod._aggregate([_finding("untestable"), _finding("untestable")])
     assert v == "untestable"
 
 
 def test_aggregate_holds_when_all_hold():
-    t = Transcript("v", "u", None, None, "...")
-    v, _ = report_mod._aggregate([_finding("holds"), _finding("holds")], t, ThesisSet("v"))
+    v, _ = report_mod._aggregate([_finding("holds"), _finding("holds")])
     assert v == "holds"
 
 
 def test_aggregate_partial_when_mixed():
-    t = Transcript("v", "u", None, None, "...")
-    v, _ = report_mod._aggregate([_finding("holds"), _finding("fails")], t, ThesisSet("v"))
+    v, _ = report_mod._aggregate([_finding("holds"), _finding("fails")])
     assert v == "partial"
 
 
 def test_aggregate_fails_when_only_fails():
-    t = Transcript("v", "u", None, None, "...")
-    v, _ = report_mod._aggregate([_finding("fails"), _finding("untestable")], t, ThesisSet("v"))
+    v, _ = report_mod._aggregate([_finding("fails"), _finding("untestable")])
     assert v == "fails"
 
 
@@ -221,13 +223,83 @@ def test_count_indicator_trigger_no_series_means_zero():
     assert occ == 0 and hits == 0
 
 
-# --------------------------------------------------------------------------- minimal report
+# --------------------------------------------------------------------------- summarize parsing
+
+
+def test_summarize_parse_basic():
+    raw = '{"content_type": "strategy_or_claim", "topic": "RSI mean reversion", "summary": "Tests an RSI strategy.", "has_checkable_claims": true}'
+    s = summarize_mod._parse(raw, "vid1")
+    assert s.content_type == "strategy_or_claim"
+    assert s.has_checkable_claims is True
+    assert s.skip_extraction is False
+
+
+def test_summarize_parse_tolerates_fence_and_bad_type():
+    raw = '```json\n{"content_type": "weird_type", "topic": "x", "summary": "y", "has_checkable_claims": false}\n```'
+    s = summarize_mod._parse(raw, "vid1")
+    assert s.content_type == "other"          # invalid type -> "other"
+    assert s.has_checkable_claims is False
+    assert s.skip_extraction is True          # other + no checkable claims -> skip
+
+
+def test_summarize_parse_bad_json_is_permissive():
+    s = summarize_mod._parse("the model rambled", "vid1")
+    assert s.content_type == "mixed"           # parse failure -> "mixed" so extraction still runs
+    assert s.has_checkable_claims is True
+    assert s.skip_extraction is False
+
+
+@pytest.mark.parametrize("ct,has_claims,skip", [
+    ("mindset_psychology", True, True),    # non-claim content type -> skip even if model said has_claims
+    ("vlog_or_journey", False, True),
+    ("promotion", False, True),
+    ("educational", False, True),           # has_checkable_claims False -> skip
+    ("educational", True, False),           # educational WITH a claim -> run extraction
+    ("strategy_or_claim", True, False),
+    ("market_commentary", True, False),
+    ("mixed", True, False),
+])
+def test_video_summary_skip_extraction(ct, has_claims, skip):
+    s = VideoSummary("v", ct, "topic", "summary", has_claims)
+    assert s.skip_extraction is skip
+
+
+# --------------------------------------------------------------------------- report builders
+
+
+def _summary(ct="strategy_or_claim", has_claims=True):
+    return VideoSummary("vid", ct, "RSI thing", "Some summary.", has_claims)
 
 
 def test_build_minimal_is_untestable():
     t = Transcript("vid", "https://youtu.be/vid", "Some Vlog", "ChannelX", "")
-    r = report_mod.build_minimal(t, "vid-20260510T000000Z", "no transcript available")
+    r = report_mod.build_minimal(t, None, "vid-20260510T000000Z", "no transcript available")
     assert r.verdict_overall == "untestable"
     assert "no transcript" in r.overall_reason
     assert "untestable" in r.markdown.lower()
     assert r.json["verdict_overall"] == "untestable"
+
+
+def test_build_summary_only_leads_with_what_this_video_is():
+    t = Transcript("vid", "https://youtu.be/vid", "Mindset Talk", "ChannelX", "transcript text " * 30)
+    s = _summary(ct="mindset_psychology", has_claims=False)
+    r = report_mod.build_summary_only(t, s, "vid-20260510T000000Z")
+    assert r.verdict_overall == "untestable"
+    assert "What this video is" in r.markdown
+    assert "mindset_psychology" in r.markdown
+    assert r.findings == []
+    assert r.json["video_summary"]["content_type"] == "mindset_psychology"
+
+
+def test_build_full_report_includes_summary_section(monkeypatch):
+    # don't hit a live LLM for the narrative intro during tests
+    monkeypatch.setattr(report_mod.llm, "available_backend", lambda: None)
+    t = Transcript("vid", "https://youtu.be/vid", "RSI Strategy", "ChannelX", "transcript text " * 30)
+    s = _summary()
+    thesis = ThesisSet("vid", claims=[
+        Claim("c1", "RSI<30 on SPY 1D bounces", "SPY", "1D", "indicator_value_over_range", "no", "no instrument list", 0.6),
+    ])
+    r = report_mod.build(t, s, thesis, [], _config(), "vid-20260510T000000Z")
+    assert "What this video is" in r.markdown
+    assert "## Claims" in r.markdown
+    assert r.json["video_summary"]["topic"] == "RSI thing"

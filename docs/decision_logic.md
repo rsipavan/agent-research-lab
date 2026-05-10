@@ -1,6 +1,19 @@
 # Decision logic
 
-Two decisions matter in this pipeline. Both live in `thesis.py`. Getting them right is most of the value.
+Three decisions matter in this pipeline. The first lives in `summarize.py` (run before anything else); the other two live in `thesis.py`. Getting them right is most of the value.
+
+## Decision 0 — What kind of video is this?
+
+Before extracting any claims, `summarize.py` characterizes the video. The point: a mindset talk, an educational explainer, market commentary, a strategy backtest, a vlog, and a course pitch are not the same thing, and the report should say which one this is before getting into any "validation."
+
+`content_type` is one of: `strategy_or_claim` · `educational` · `market_commentary` · `mindset_psychology` · `vlog_or_journey` · `promotion` · `mixed` · `other`. The summarizer also writes a `topic` (short phrase), a 2-4 sentence `summary`, and a `has_checkable_claims` boolean (conservative — err toward `false`).
+
+This decision **routes the pipeline**:
+
+- `mindset_psychology`, `vlog_or_journey`, `promotion`, `other`, or *any* type with `has_checkable_claims = false` → the pipeline **skips claim extraction entirely** and produces a summary-only report: "this is a `<type>` video about `<topic>` — here's what's in it, and there's nothing here to validate against market data, and why." Running the extractor over a pure pep-talk to find zero claims is wasted effort; saying plainly "this is a mindset video" is the honest output.
+- `strategy_or_claim`, `educational`, `market_commentary`, `mixed` (with `has_checkable_claims = true`) → proceed to claim extraction, which receives the summary as context (so an educational video calibrates toward "few/weak claims", a strategy video toward "there should be a real one").
+
+The report **always leads with this** — a "What this video is" section — before any claims table. A reader sees what the video is before they see any verdicts.
 
 ## Decision 1 — Is this a testable claim?
 

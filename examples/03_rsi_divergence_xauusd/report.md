@@ -1,4 +1,4 @@
-The video presents an RSI divergence strategy filtered by the 200 EMA â€” go long on bullish divergence above the EMA, short on bearish divergence below it â€” claiming a 68â€“70% win rate, roughly 37% portfolio growth from a $1,000 account over 31 trades, and only 3â€“4 trades per quarter on higher timeframes. None of these claims could be verified against market data because the backtest spans unnamed instruments and unspecified timeframes, leaving every result impossible to reproduce or challenge. The strategy may or may not work as described; there is simply no way to know from what the video provides.
+The video presents a trend-following strategy that combines RSI divergence signals with the 200 EMA as a directional filter â€” going long above the EMA on bullish divergence, short below it on bearish divergence â€” and reports a 70% win rate across 31 trades in forex and gold with roughly 37% portfolio growth from a $1,000 starting balance. None of those claims could be verified against market data: the strategy's performance figures come only from the creator's own backtest, and the broader assertions ("works for all markets," "smaller timeframes carry higher risk") name no falsifiable thresholds. Every claim in this video came back untestable.
 
 ---
 
@@ -8,31 +8,36 @@ The video presents an RSI divergence strategy filtered by the 200 EMA â€” g
 
 _Source: https://www.youtube.com/watch?v=aHeWIR8kM9o_
 
+## What this video is
+
+- **Type:** `strategy_or_claim`
+- **Topic:** RSI divergence + EMA 200 trend-following strategy backtest
+- **Summary:** The video presents a trading strategy combining RSI divergence signals with the 200 EMA as a trend filter, entering long when price is above the EMA with bullish divergence and short when below with bearish divergence. The creator reports backtesting 31 trades across forex and gold markets with a claimed 70% win rate, 1:2 risk-reward ratio, and approximately 37% portfolio growth from a $1,000 starting balance. Setup instructions are given for TradingView using built-in RSI divergence detection and the EMA 200 indicator. Recommended timeframes are 15-minute and above.
+- **Has checkable market claims:** yes
+
 ## Claims
 
 | # | Claim | Testable | Test | Verdict |
 |---|---|---|---|---|
-| c1 | A strategy combining RSI divergence signals (long when bullish divergence appears above EMA 200, short when bearish divergence appears below EMA 200) with a 1:2 risk-reward ratio and 1% risk per trade achieved a 68â€“70% win rate over 31 trades. | no | strategy_backtest | **untestable** |
-| c2 | The RSI divergence + EMA 200 strategy produced approximately 37% portfolio growth ($371 net profit) from a $1,000 starting balance over 31 trades with 1% risk per trade. | no | strategy_backtest | **untestable** |
-| c3 | On long time frames, the RSI divergence + EMA 200 strategy produces only 3â€“4 trades over approximately 3 months. | no | indicator_value_over_range | **untestable** |
+| c1 | This strategy works for gold trading, forex trading, and all markets including day trading. | no | none | **untestable** |
+| c2 | Smaller timeframes yield more trades but carry higher risk than larger timeframes with this strategy. | no | none | **untestable** |
+| c3 | An RSI divergence strategy filtered by EMA 200 (long when price is above EMA 200 with bullish divergence, short when price is below EMA 200 with bearish divergence, 1:2 risk-reward, 1% risk per trade) achieves a 70% win rate across forex and gold markets. | partial | strategy_backtest | **untestable** |
 
 ## Findings
 
-### c1 — A strategy combining RSI divergence signals (long when bullish divergence appears above EMA 200, short when bearish divergence appears below EMA 200) with a 1:2 risk-reward ratio and 1% risk per trade achieved a 68â€“70% win rate over 31 trades.
+### c1 — This strategy works for gold trading, forex trading, and all markets including day trading.
 
-- **Verdict:** untestable — No specific instrument or timeframe is fixed â€” the backtest was described as spanning 'all these markets' without naming any single ticker or pinning a time frame.
-- **Why not testable:** No specific instrument or timeframe is fixed â€” the backtest was described as spanning 'all these markets' without naming any single ticker or pinning a time frame.
+- **Verdict:** untestable — No specific instrument, timeframe, or quantitative performance threshold â€” 'works for all markets' is a marketing assertion with no falsifiable criterion.
+- **Why not testable:** No specific instrument, timeframe, or quantitative performance threshold â€” 'works for all markets' is a marketing assertion with no falsifiable criterion.
 
-### c2 — The RSI divergence + EMA 200 strategy produced approximately 37% portfolio growth ($371 net profit) from a $1,000 starting balance over 31 trades with 1% risk per trade.
+### c2 — Smaller timeframes yield more trades but carry higher risk than larger timeframes with this strategy.
 
-- **Verdict:** untestable — No specific instrument or timeframe is identified; the result is presented as an aggregate across unspecified markets and unspecified time frames.
-- **Why not testable:** No specific instrument or timeframe is identified; the result is presented as an aggregate across unspecified markets and unspecified time frames.
+- **Verdict:** untestable — 'Risk' is undefined and 'more trades on smaller timeframes' is a structural feature of any time-based chart â€” no instrument, threshold, or quantitative outcome is specified.
+- **Why not testable:** 'Risk' is undefined and 'more trades on smaller timeframes' is a structural feature of any time-based chart â€” no instrument, threshold, or quantitative outcome is specified.
 
-### c3 — On long time frames, the RSI divergence + EMA 200 strategy produces only 3â€“4 trades over approximately 3 months.
+### c3 — An RSI divergence strategy filtered by EMA 200 (long when price is above EMA 200 with bullish divergence, short when price is below EMA 200 with bearish divergence, 1:2 risk-reward, 1% risk per trade) achieves a 70% win rate across forex and gold markets.
 
-- **Verdict:** untestable — No specific instrument is named and 'long time frames' is not quantified (daily? weekly? monthly?), making the claim untestable as stated.
-- **Why not testable:** No specific instrument is named and 'long time frames' is not quantified (daily? weekly? monthly?), making the claim untestable as stated.
-
+- **Verdict:** untestable — this is a full strategy — needs a backtest engine (not in v1)
 ---
 
-_Generated by [agent-research-lab](https://github.com/) — verdicts are computed from market data via the TradingView MCP, not LLM-judged. See the trace for the step-by-step._
+_Generated by [agent-research-lab](https://github.com/) — the video is characterized first, then any checkable claims are validated against market data via the TradingView MCP. Verdicts are computed from the data, not LLM-judged. See the trace for the step-by-step._

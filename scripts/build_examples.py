@@ -84,6 +84,9 @@ def main() -> int:
 
         (out / "report.md").write_text(report.markdown, encoding="utf-8")
         (out / "report.json").write_text(json.dumps(report.json, indent=2), encoding="utf-8")
+        vs = report.json.get("video_summary")
+        if vs:
+            (out / "summary.json").write_text(json.dumps(vs, indent=2), encoding="utf-8")
         (out / "thesis.json").write_text(
             json.dumps([f["statement"] and {
                 "claim_id": f["claim_id"], "statement": f["statement"],

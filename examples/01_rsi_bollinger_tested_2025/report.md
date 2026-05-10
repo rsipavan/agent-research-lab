@@ -1,4 +1,4 @@
-The video tested a Bollinger Bands + RSI mean-reversion strategy â€” buy below the lower band with RSI oversold, exit at the middle band â€” across 100 liquid crypto tickers and US stocks at timeframes ranging from 1-minute to daily. It concluded the strategy is unprofitable on crypto at every intraday timeframe and inconsistent on US stocks, with no reliable directional pattern across timeframes. None of these claims could be verified against market data independently, so the report takes the video's own backtest results at face value without confirmation or contradiction.
+This video backtests a Bollinger Bands and RSI mean-reversion strategy â€” long when price crosses below the lower band with RSI oversold, exit at the middle band â€” across crypto, US stocks, futures, and forex at timeframes from 1-minute to 1-day. The author's own results are almost uniformly negative, with no market or timeframe producing a meaningful edge, and hyperparameter optimization failing to change that conclusion. None of the specific claims were independently verifiable against market data, so every verdict below is untestable rather than confirmed or refuted.
 
 ---
 
@@ -8,31 +8,37 @@ The video tested a Bollinger Bands + RSI mean-reversion strategy â€” buy be
 
 _Source: https://www.youtube.com/watch?v=j2ESnjhT2no_
 
+## What this video is
+
+- **Type:** `strategy_or_claim`
+- **Topic:** Bollinger Bands + RSI mean-reversion strategy backtest across markets
+- **Summary:** A systematic backtest of a popular Bollinger Bands and RSI mean-reversion strategy across crypto, US stocks, futures, and forex at multiple timeframes using Python and historical OHLCV data. The strategy enters long when price crosses below the lower Bollinger Band with RSI oversold, and exits at the middle band with RSI above threshold (reverse for shorts). Results were consistently negative or negligible across most markets and timeframes, with no reliable edge found. Hyperparameter optimization produced only marginal improvements, failing to change the overall conclusion that the strategy does not work reliably.
+- **Has checkable market claims:** yes
+
 ## Claims
 
 | # | Claim | Testable | Test | Verdict |
 |---|---|---|---|---|
-| c1 | The overall BB+RSI mean-reversion strategy is unreliable because no consistent profitable results were achieved across markets. | no | none | **untestable** |
-| c2 | A Bollinger Bands + RSI mean-reversion strategy â€” enter long when price crosses below the lower BB and RSI is below the oversold threshold, exit when price crosses the middle BB and RSI is above the exit threshold, mirror for shorts â€” applied across 100 most-liquid crypto tickers is unprofitable at every intraday timeframe from 4H to 1m, with losses growing at shorter timeframes (e.g., -$25,000 on 3m, -$370 on 4H). | no | strategy_backtest | **untestable** |
-| c3 | The same BB+RSI mean-reversion strategy on US stocks shows positive Sharpe on 1D (1.13), 1H (2.4), and 15m (10.88) but negative Sharpe on 4H (-1.6), 30m (-7.9), 5m (-12), and 1m (~-100), with no consistent directional pattern. | no | strategy_backtest | **untestable** |
+| c1 | When price moves sufficiently in one direction under certain conditions, it will always return to the mean. | no | none | **untestable** |
+| c2 | A mean-reversion strategy entering long when price crosses below the lower Bollinger Band (default 20-period, 2 std) with RSI below an oversold threshold and exiting when price crosses the middle band with RSI above a corresponding threshold produces negative returns on the top-100-liquid crypto tickers across every timeframe from 4H down to 1-minute, and only a negligible positive result (~$70, Sharpe ~1.2) on the 1-day timeframe. | no | strategy_backtest | **untestable** |
+| c3 | The same BB+RSI mean-reversion strategy applied to the most liquid US stocks produces a small positive return on the 1-day timeframe (Sharpe ~1.13, ~$200 net profit) but loses money at most intraday timeframes. | no | strategy_backtest | **untestable** |
 
 ## Findings
 
-### c1 — The overall BB+RSI mean-reversion strategy is unreliable because no consistent profitable results were achieved across markets.
+### c1 — When price moves sufficiently in one direction under certain conditions, it will always return to the mean.
 
-- **Verdict:** untestable — This is the channel's editorial conclusion summarizing the backtest results, not a discrete falsifiable claim.
-- **Why not testable:** This is the channel's editorial conclusion summarizing the backtest results, not a discrete falsifiable claim.
+- **Verdict:** untestable — No instrument, timeframe, quantified threshold, or time horizon is specified; 'always' is unfalsifiable in practice and the statement functions as narrative justification for the strategy concept, not a checkable claim.
+- **Why not testable:** No instrument, timeframe, quantified threshold, or time horizon is specified; 'always' is unfalsifiable in practice and the statement functions as narrative justification for the strategy concept, not a checkable claim.
 
-### c2 — A Bollinger Bands + RSI mean-reversion strategy â€” enter long when price crosses below the lower BB and RSI is below the oversold threshold, exit when price crosses the middle BB and RSI is above the exit threshold, mirror for shorts â€” applied across 100 most-liquid crypto tickers is unprofitable at every intraday timeframe from 4H to 1m, with losses growing at shorter timeframes (e.g., -$25,000 on 3m, -$370 on 4H).
-
-- **Verdict:** untestable — the video makes this point but it isn't a checkable claim
-- **Scope:** crypto (100 most liquid tickers) · 4H, 1H, 30m, 15m, 5m, 3m, 1m
-
-### c3 — The same BB+RSI mean-reversion strategy on US stocks shows positive Sharpe on 1D (1.13), 1H (2.4), and 15m (10.88) but negative Sharpe on 4H (-1.6), 30m (-7.9), 5m (-12), and 1m (~-100), with no consistent directional pattern.
+### c2 — A mean-reversion strategy entering long when price crosses below the lower Bollinger Band (default 20-period, 2 std) with RSI below an oversold threshold and exiting when price crosses the middle band with RSI above a corresponding threshold produces negative returns on the top-100-liquid crypto tickers across every timeframe from 4H down to 1-minute, and only a negligible positive result (~$70, Sharpe ~1.2) on the 1-day timeframe.
 
 - **Verdict:** untestable — the video makes this point but it isn't a checkable claim
-- **Scope:** US stocks · 1D, 4H, 1H, 30m, 15m, 5m, 1m
+- **Scope:** crypto (top 100 by liquidity) · 1mâ€“1D
 
+### c3 — The same BB+RSI mean-reversion strategy applied to the most liquid US stocks produces a small positive return on the 1-day timeframe (Sharpe ~1.13, ~$200 net profit) but loses money at most intraday timeframes.
+
+- **Verdict:** untestable — the video makes this point but it isn't a checkable claim
+- **Scope:** US stocks (most liquid) · 1D
 ---
 
-_Generated by [agent-research-lab](https://github.com/) — verdicts are computed from market data via the TradingView MCP, not LLM-judged. See the trace for the step-by-step._
+_Generated by [agent-research-lab](https://github.com/) — the video is characterized first, then any checkable claims are validated against market data via the TradingView MCP. Verdicts are computed from the data, not LLM-judged. See the trace for the step-by-step._

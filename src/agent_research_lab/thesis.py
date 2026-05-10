@@ -20,7 +20,7 @@ import time
 
 from . import llm
 from .config import Config
-from .types import Claim, ThesisSet, Transcript
+from .types import Claim, ThesisSet, Transcript, VideoSummary
 
 
 class ExtractionError(RuntimeError):
@@ -67,6 +67,9 @@ _USER_TEMPLATE = """\
 Video: {title} — {channel}
 URL: {url}
 
+What this video is (from the summarize step): {content_type} — {topic}
+{summary}
+
 Transcript:
 \"\"\"
 {transcript}
@@ -75,14 +78,17 @@ Transcript:
 Extract the checkable claims as specified. JSON only."""
 
 
-def extract(transcript: Transcript, config: Config) -> ThesisSet:
+def extract(transcript: Transcript, summary: VideoSummary | None, config: Config) -> ThesisSet:
     """Run extraction. Returns a ThesisSet (possibly with zero claims). Raises
-    ExtractionError if the LLM call fails after a retry."""
+    ExtractionError if the LLM call fails after a retry. `summary` (from the
+    summarize step) is passed to the model as context so it calibrates — e.g. an
+    educational video usually has few/weak claims; a strategy_or_claim video should
+    have a real one."""
     if transcript.is_empty:
         # The orchestrator normally short-circuits before calling us, but be safe.
         return ThesisSet(video_id=transcript.video_id, claims=[])
 
-    raw = _call_llm(transcript, config)
+    raw = _call_llm(transcript, summary, config)
     claims = _parse_claims(raw, transcript.video_id)
     claims = _apply_gates(claims, config)
     return ThesisSet(video_id=transcript.video_id, claims=claims)
@@ -91,11 +97,14 @@ def extract(transcript: Transcript, config: Config) -> ThesisSet:
 # ---------------------------------------------------------------------------
 
 
-def _call_llm(transcript: Transcript, config: Config) -> str:
+def _call_llm(transcript: Transcript, summary: VideoSummary | None, config: Config) -> str:
     user = _USER_TEMPLATE.format(
         title=transcript.title or "(unknown title)",
         channel=transcript.channel or "(unknown channel)",
         url=transcript.url,
+        content_type=summary.content_type if summary else "unknown",
+        topic=summary.topic if summary else "(not summarized)",
+        summary=summary.summary if summary else "",
         # cap the transcript we send — long videos get truncated; the first ~12k words
         # carry the thesis in practice
         transcript=" ".join(transcript.text.split()[:12000]),

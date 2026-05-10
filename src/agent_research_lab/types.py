@@ -41,6 +41,43 @@ class Transcript:
 
 
 # ---------------------------------------------------------------------------
+# summarize.py output — the FIRST thing the pipeline does after fetching the
+# transcript: establish what kind of video this is, before any claim extraction.
+# ---------------------------------------------------------------------------
+
+ContentType = Literal[
+    "strategy_or_claim",     # presents a trading strategy / makes checkable claims about market behavior
+    "educational",           # explains a concept (what RSI is, how order blocks work) — may contain weak claims
+    "market_commentary",     # opinion/prediction on current markets ("I think Q3 is bullish")
+    "mindset_psychology",    # trader psychology, discipline, habits — no checkable market claims
+    "vlog_or_journey",       # the creator's trading story / lifestyle / day-in-the-life
+    "promotion",             # course / signals / prop-firm / community sales pitch
+    "mixed",                 # a real blend (e.g. strategy + psychology + a bit of promo)
+    "other",                 # none of the above (off-topic, etc.)
+]
+
+# Content types where there is, by nature, nothing to validate — the pipeline
+# short-circuits to a summary-only report rather than running claim extraction.
+NON_CLAIM_CONTENT_TYPES = frozenset({"mindset_psychology", "vlog_or_journey", "promotion", "other"})
+
+
+@dataclass
+class VideoSummary:
+    """What the video is about — produced before claim extraction. The report leads
+    with this; the extractor (when it runs) gets it as context."""
+
+    video_id: str
+    content_type: ContentType
+    topic: str       # short — what the video is about, e.g. "RSI + Bollinger Bands mean-reversion backtest"
+    summary: str     # 2-4 sentences — what's actually in it
+    has_checkable_claims: bool  # the model's read on whether there's anything testable at all
+
+    @property
+    def skip_extraction(self) -> bool:
+        return self.content_type in NON_CLAIM_CONTENT_TYPES or not self.has_checkable_claims
+
+
+# ---------------------------------------------------------------------------
 # thesis.py output
 # ---------------------------------------------------------------------------
 
@@ -135,6 +172,7 @@ class Report:
     video_title: str | None
     video_url: str
     channel: str | None
+    video_summary: VideoSummary | None  # what kind of video this is — leads the report
     findings: list[ClaimFinding]
     verdict_overall: Verdict  # the "headline" — see report.py for how it's aggregated
     overall_reason: str

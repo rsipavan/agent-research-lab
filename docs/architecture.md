@@ -11,11 +11,15 @@ flowchart TD
     TB[telegram_bot.py] -->|url| ORC[orchestrate.py]
     ORC -->|url| TR[transcript.py]
     TR -->|Transcript| ORC
-    ORC -->|Transcript| TH[thesis.py]
+    ORC -->|Transcript| SUM[summarize.py]
+    SUM -->|VideoSummary| ORC
+    ORC -->|"summary.skip_extraction?"| DEC{claim-bearing?}
+    DEC -- no --> REP
+    DEC -- yes --> TH[thesis.py]
     TH -->|ThesisSet| ORC
     ORC -->|Claim each| VAL[validate.py]
     VAL -->|ValidationRun| ORC
-    ORC -->|Transcript, ThesisSet, runs| REP[report.py]
+    ORC -->|Transcript, VideoSummary, ThesisSet, runs| REP[report.py]
     REP -->|Report| ORC
     ORC -->|Report| TB
     ORC -.->|every step| TRACE[(traces/run-id.jsonl)]
@@ -24,9 +28,10 @@ flowchart TD
 | Module | Input | Output | Depends on |
 |---|---|---|---|
 | `transcript.py` | `url: str` | `Transcript {video_id, title, channel, url, text, fetched_at}` | `youtube-transcript-api` |
-| `thesis.py` | `Transcript` | `ThesisSet {video_id, claims: list[Claim]}` where `Claim {id, statement, instrument, timeframe, test_type, testable: "yes"|"partial"|"no", reason_if_not, confidence}` | `llm.py`, `config.yml` (extraction) |
+| `summarize.py` | `Transcript` | `VideoSummary {content_type, topic, summary, has_checkable_claims}` — runs first; routes the pipeline (non-claim videos skip extraction) | `llm.py` |
+| `thesis.py` | `Transcript`, `VideoSummary` | `ThesisSet {video_id, claims: list[Claim]}` where `Claim {id, statement, instrument, timeframe, test_type, testable: "yes"|"partial"|"no", reason_if_not, confidence}` | `llm.py`, `config.yml` (extraction) |
 | `validate.py` | `Claim` | `ValidationRun {claim_id, test_type, status: "ok"|"error"|"insufficient_data", tradingview_query, data_summary, result, caveats}` | `mcp_client.py` (TradingView MCP), `config.yml` (test_types, validation) |
-| `report.py` | `Transcript`, `ThesisSet`, `list[ValidationRun]` | `Report {video, claims_table, per_claim_findings, verdict_overall, markdown, json}` | `llm.py` (narrative synthesis only — the verdicts are computed, not LLM-judged) |
+| `report.py` | `Transcript`, `VideoSummary`, `ThesisSet`, `list[ValidationRun]` | `Report {video, video_summary, claims_table, per_claim_findings, verdict_overall, markdown, json}` — markdown leads with a "What this video is" section | `llm.py` (narrative synthesis only — the verdicts are computed, not LLM-judged) |
 | `llm.py` | `system, prompt` | `str` | auto-detects: `claude` CLI (default, no key) → Anthropic API → Gemini API |
 | `mcp_client.py` | `tool_name, args` | `dict` | TradingView MCP (HTTP/SSE via `TRADINGVIEW_MCP_URL`); retries per config; raises `McpError` (which `validate.py` turns into an `error` ValidationRun) |
 | `orchestrate.py` | `url: str` | `Report` | all of the above; writes `traces/<run-id>.jsonl` |
