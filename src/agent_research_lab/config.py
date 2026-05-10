@@ -24,7 +24,8 @@ class Config:
     anthropic_api_key: str
     anthropic_model: str
     telegram_allowlist: list[int]
-    tradingview_mcp_url: str | None
+    tradingview_mcp_url: str | None    # HTTP/SSE endpoint
+    tradingview_mcp_cmd: str | None    # stdio: command that launches the MCP server
 
     # config.yml
     test_types: dict[str, bool]
@@ -60,6 +61,7 @@ def load_config(config_path: Path | None = None) -> Config:
         anthropic_model=os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-6"),
         telegram_allowlist=allowlist,
         tradingview_mcp_url=os.getenv("TRADINGVIEW_MCP_URL") or None,
+        tradingview_mcp_cmd=os.getenv("TRADINGVIEW_MCP_CMD") or None,
         test_types=raw.get("test_types", {
             "indicator_value_over_range": True,
             "level_zone_hit_rate": True,

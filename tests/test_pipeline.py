@@ -27,7 +27,7 @@ from agent_research_lab.types import Claim, ThesisSet, Transcript, ValidationRun
 def _config(**overrides) -> Config:
     base = dict(
         telegram_bot_token="", anthropic_api_key="", anthropic_model="claude-sonnet-4-6",
-        telegram_allowlist=[], tradingview_mcp_url=None,
+        telegram_allowlist=[], tradingview_mcp_url=None, tradingview_mcp_cmd=None,
         test_types={"indicator_value_over_range": True, "level_zone_hit_rate": True, "strategy_backtest": False},
         default_timeframe="1D", default_lookback_days=365, symbol_fallback=None,
         max_claims_per_video=3, min_confidence=0.5, mcp_retries=1, mcp_timeout_seconds=60,
