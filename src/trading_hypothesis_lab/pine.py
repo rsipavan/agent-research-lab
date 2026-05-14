@@ -231,7 +231,7 @@ def _synthesize(
     )
 
     try:
-        result = llm_mod.complete(system, prompt, max_tokens=4000, timeout=300)
+        result = llm_mod.complete(system, prompt, max_tokens=4000, timeout=600)
     except llm_mod.LlmError as e:
         raise PineSynthesisError(str(e)) from e
 
