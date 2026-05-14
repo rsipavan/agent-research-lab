@@ -2,64 +2,58 @@
 
 ![tests](https://github.com/rsipavan/agent-research-lab/actions/workflows/test.yml/badge.svg)
 
-**An autonomous validation and orchestration system — adjacent to eval infrastructure, observability tooling, and research automation. The domain is trading content. The engineering pattern is general.**
+I got tired of watching trading videos that confidently claim a strategy "works consistently" with nothing to back it up. So I built a system that checks.
 
-*By [R Sai Pavan](https://www.linkedin.com/in/sai-pavan-86635b23/) — autonomous systems operator. This repo is a public, end-to-end demonstration of how I design systems that reason, validate, and degrade gracefully.*
+You give it a YouTube URL. It pulls the transcript, figures out what kind of video it is, extracts any claims that could actually be tested against market data, and then tests them — with real data, through TradingView, using explicit rules. The report tells you what it found, how confident the numbers are, and exactly where the reasoning stopped if it couldn't conclude anything.
 
-This is **not** a trading bot, a signal generator, or an AI that watches YouTube videos.
+It's not a trading bot. It doesn't generate signals or execute trades. The domain is trading content. The engineering pattern — deterministic evaluation, observable workflows, graceful degradation — applies to any autonomous research pipeline operating under uncertainty.
 
-It is a **validation and orchestration system** that happens to operate on trading content. The domain is incidental. The pattern — deterministic evaluation, causal validation, explicit uncertainty, observable workflows, graceful degradation at every failure point — transfers directly to any autonomous research pipeline operating under uncertainty.
-
-The strongest thing in this repo is **operational honesty**: the system repeatedly rejects claims, surfaces ambiguity, preserves failure traces, and avoids overclaiming. That's the design, not the domain.
+*Built by [R Sai Pavan](https://www.linkedin.com/in/sai-pavan-86635b23/) · saipavan.pilot1@gmail.com*
 
 ---
 
-## Quickstart
+## Try it
 
 ```bash
 pip install -e .
 python -m agent_research_lab.orchestrate "https://www.youtube.com/watch?v=..."
 ```
 
-What happens, step by step:
+What happens:
 
 ```
 Transcript fetched      — pulls and cleans the YouTube transcript
         ↓
-Video classified        — content type, topic, whether it makes checkable claims
+Video classified        — is this a strategy claim, market commentary, a course pitch?
         ↓
 Claims extracted        — each claim tagged: instrument, timeframe, test type, testable?
         ↓
 Claim operationalized   — trigger condition + outcome window formalized into a runnable test
         ↓
-Validation executed     — real market data via TradingView MCP; for strategy claims, Pine Script synthesized + compiled + backtested
+Validation executed     — real market data via TradingView MCP; strategy claims get Pine Script synthesized, compiled, and backtested
         ↓
-Verdict computed        — thresholds applied in code, not LLM-judged: holds / partial / fails / untestable
+Verdict computed        — thresholds applied in code, not asked of the LLM: holds / partial / fails / untestable
 ```
 
-Real output from [`examples/06_orb_pine_strategy_backtest/`](examples/06_orb_pine_strategy_backtest/):
+Here's real output from [`examples/06_orb_pine_strategy_backtest/`](examples/06_orb_pine_strategy_backtest/):
 
-**Claim extracted:**
 ```
-ORB: enter long when price closes above the first-15-minute high, enter short when
-price closes below the first-15-minute low. Stop at the opposite end of the opening
-range. Target 1.5x range size. Exit all positions by 3 PM. Works consistently on SPY.
+Claim extracted:
+  ORB: enter long when price closes above the first-15-minute high, enter short when
+  price closes below the first-15-minute low. Stop at the opposite end of the opening
+  range. Target 1.5x range size. Exit all positions by 3 PM. Works consistently on SPY.
+  → instrument: SPY | timeframe: 5m | test_type: strategy_backtest | testable: yes
 
-instrument: SPY | timeframe: 5m | test_type: strategy_backtest | testable: yes | confidence: 0.95
-```
+Validation:
+  Pine Script synthesized → compiled (0 errors) → strategy tester run
+  66 trades | win rate 48% | net profit −4,082 | profit factor 0.91 | max drawdown 6,560
 
-**Validation executed:**
-```
-Pine Script synthesized → compiled (0 errors) → strategy tester run
-66 trades | win rate 48% | net profit −4,082 | profit factor 0.91 | max drawdown 6,560
-```
-
-**Verdict computed:**
-```
-NOT SUPPORTED — no edge: profit factor 0.91, net profit −4,082.41 over 66 trades
+Verdict:
+  NOT SUPPORTED — no edge: profit factor 0.91, net profit −4,082.41 over 66 trades
 ```
 
-**Trace (`trace.jsonl`):**
+The trace for that run:
+
 ```jsonl
 {"step": "transcript.fetch",  "ok": true, "ms": 0,     "detail": "fetched 218 words"}
 {"step": "video.summarize",   "ok": true, "ms": 312,   "detail": "strategy_or_claim — ORB intraday strategy — SPY 5-minute"}
@@ -68,11 +62,11 @@ NOT SUPPORTED — no edge: profit factor 0.91, net profit −4,082.41 over 66 tr
 {"step": "report.build",      "ok": true, "ms": 4,     "detail": "verdict_overall=fails; 1 claim"}
 ```
 
-Every run saves the full artifact bundle to `runs/<run_id>/`: transcript, summary, extracted claims, report (markdown + JSON), trace, and any `.pine` files.
+Everything saves to `runs/<run_id>/` — transcript, summary, extracted claims, report, trace, and the `.pine` file if one was generated.
 
 ---
 
-## What it does
+## How it works
 
 ```mermaid
 flowchart LR
@@ -98,18 +92,25 @@ flowchart LR
     F -.trace.-> T
 ```
 
-1. **Ingest** — `transcript.py` pulls and cleans the YouTube transcript.
-2. **Summarize** — `summarize.py` runs first and characterizes the video: strategy/backtest, educational explainer, market commentary, trader psychology, vlog, course pitch, or a mix. It writes a `content_type`, a topic, a 2-4 sentence summary, and a `has_checkable_claims` flag. If the video isn't claim-bearing by nature (psychology / vlog / promo) the pipeline stops here and returns a summary-only report.
-3. **Extract** — for claim-bearing videos, `thesis.py` extracts *testable claims* — each tagged with instrument, timeframe, test type, and whether it's actually testable (with a reason if not). The extractor is expected to say "this is a take, not a checkable claim." Prior failure traces from the validation memory are injected into the prompt to improve formalization quality.
-4. **Validate** — two paths, depending on claim type:
-   - *Indicator / level claims* — `validate.py` fetches OHLCV bars from TradingView, computes RSI / SMA / EMA in Python, and measures how often the trigger condition led to the claimed outcome over a multi-year lookback.
-   - *Strategy claims* — `pine.py` synthesizes a complete Pine Script v6 strategy from the transcript (extracting on-screen code if present, or writing from the verbal description if not), compiles it via the TradingView MCP with an LLM self-repair loop (up to 3 fix attempts), runs the TradingView strategy tester, and returns real backtest metrics: trades, win rate, net profit, max drawdown, profit factor.
-5. **Report** — `report.py` builds the report. It **leads with "what this video is"**, then per-claim structured output answering five questions: what was claimed, what was testable, what data was checked, what happened, why the system concluded what it did. Verdicts are *computed* from the validation data by explicit thresholds — not LLM-judged. When a strategy is a consistent loser (profit factor so low that the mutated hypothesis — reversing all entries and exits — clears the holds threshold), the report states this as a hypothesis mutation finding.
-6. **Reply** — `telegram_bot.py` sends live progress (each step edits one status message), chart screenshots per validated claim, trade overlay for strategy claims, full report text, and `.pine` attachments.
-7. **Accumulate** — every run appends to `knowledge/store.jsonl`: how the claim was formalized, which failure modes occurred, what the validation found. The next thesis extraction gets prior failure traces as context — recurring ambiguity patterns, failed operationalizations, Pine compile heuristics — improving claim formalization, parameter inference, and validation routing on every subsequent run.
-8. **Trace** — every run writes `traces/<run-id>.jsonl`, one line per step, with timing and outcome. The committed examples include their full traces.
+**Step 1 — Ingest.** `transcript.py` fetches and cleans the YouTube transcript.
 
-## Architecture
+**Step 2 — Summarize.** Before extracting any claims, `summarize.py` figures out what kind of video this is — strategy walkthrough, educational explainer, market commentary, course pitch, vlog. If it's the kind of video that doesn't make checkable claims by nature (mindset content, promos), the pipeline stops here and returns a summary-only report. No point extracting claims from a sales pitch.
+
+**Step 3 — Extract.** For claim-bearing videos, `thesis.py` pulls out the testable claims. Each one gets tagged with instrument, timeframe, test type, and a judgment on whether it's actually testable — with a reason if not. The extractor is expected to say "that's a take, not a claim." It also gets prior failure traces injected from the knowledge base, so it knows what's gone wrong on similar claims before.
+
+**Step 4 — Validate.** Two paths depending on claim type. Indicator and level claims go to `validate.py`, which fetches OHLCV data from TradingView, computes the relevant indicator in Python, and measures the hit rate over a multi-year lookback. Strategy claims go to `pine.py`, which synthesizes a complete Pine Script strategy from the transcript, compiles it via TradingView MCP with an LLM self-repair loop (up to 3 fix attempts), runs the strategy tester, and returns real backtest metrics.
+
+**Step 5 — Report.** `report.py` leads with what the video actually is, then walks through each claim — what was said, what was testable, what the data showed, and why the system concluded what it did. Verdicts come from explicit thresholds applied to the validation data, not from asking the LLM to judge anything. If a strategy is a consistent loser to the point that reversing every entry and exit would have cleared the holds threshold, the report flags that as a hypothesis mutation finding.
+
+**Step 6 — Reply.** If you're running the Telegram bot, it sends live progress updates as each step completes (editing a single status message rather than spamming), chart screenshots, trade overlays for strategy claims, the full report, and the `.pine` file as an attachment.
+
+**Step 7 — Accumulate.** Every run appends to `knowledge/store.jsonl` — how the claim was formalized, what failure modes came up, what the validation found. The next time a similar claim comes through, the extractor gets those prior traces as context. Not self-improving trading. Self-improving reliability.
+
+**Step 8 — Trace.** Every step writes one line to `traces/<run-id>.jsonl` with timing and outcome. The examples in this repo include their full traces so you can see exactly what the system did on each run.
+
+---
+
+## Code layout
 
 ```
 src/agent_research_lab/
@@ -132,88 +133,29 @@ knowledge/
 └── store.jsonl        # append-only operationalization memory (committed; grows across runs)
 ```
 
-Each module has one job, a small typed interface, and can be tested in isolation. The data contract between them is documented in `docs/architecture.md`.
+Each module has one job and a small typed interface. The full data contract is in [`docs/architecture.md`](docs/architecture.md).
 
-## Design Principles
+---
 
-Five principles, stated as trade-offs. Both sides have value. These are the ones this system consistently chooses.
+## The design choices that matter
 
-| This | Over this |
-|---|---|
-| **Deterministic evaluation** — verdicts computed by explicit thresholds in code | **LLM judgment** — asking the model to decide what's true |
-| **Graceful degradation** — every failure mode returns a structured result with a reason | **Silent failure** — crashing, returning nothing, or returning something misleading |
-| **Observable workflows** — one-line-per-step trace, live Telegram progress, committed artifacts | **Opaque automation** — a black box that produces an answer with no audit trail |
-| **Explicit uncertainty** — "partial support, 58% of 89 occurrences, below the 65% threshold" | **Forced certainty** — binary pass/fail that hides the sample size and rate |
-| **Causal validation** — specific trigger → specific measurable outcome, tested against data | **Retrospective reasoning** — explaining why a chart move happened after the fact |
+A few things I kept coming back to while building this:
 
-These are not aspirational. They are the constraints that shaped every specific code choice in this repo.
+**Verdicts come from code, not the model.** The LLM extracts claims and synthesizes Pine Script. It doesn't decide whether a claim holds. That decision comes from thresholds applied to real numbers — hit rate, profit factor, trade count. Same data always gives the same verdict. You can audit it.
 
-The system also accumulates **operationalization memory** (`knowledge/store.jsonl`): recurring ambiguity patterns, failed operationalizations, Pine compile repair heuristics, hypothesis mutation experiments. This is not self-improving trading. It is self-improving reliability.
+**Every failure mode has a name and a return value.** Nothing silently crashes or returns a misleading result. If the transcript is empty, that's a named outcome. If the MCP times out, that's a named outcome. If the Pine Script won't compile after 3 attempts, the file still gets saved, the run still completes, and the trace says exactly what happened. The system degrades — it doesn't disappear.
 
-## The interesting docs
+**"Untestable" is a first-class result.** Most of the examples in this repo end with `untestable`. That's the system working correctly, not failing. A lot of trading content doesn't make checkable claims — it makes predictions, narratives, and sales pitches. Saying so clearly is more useful than manufacturing a test result.
 
-- [`docs/decision_logic.md`](docs/decision_logic.md) — how the agent decides what counts as a testable claim, and which test type to run
-- [`docs/validation_logic.md`](docs/validation_logic.md) — what the validation actually does, what it can and can't conclude, why
-- [`docs/failure_handling.md`](docs/failure_handling.md) — the failure matrix: no transcript, no testable claim, ambiguous claim, MCP error, insufficient data — what happens in each case and why it's handled there
+**The trace is always there.** Every run leaves a `trace.jsonl` with one line per step — timing, outcome, detail. Not for debugging (though it helps there too). For trust. Anyone reading the report can open the trace and see exactly what the system did.
 
-## Run it
+**The memory accumulates across runs.** `knowledge/store.jsonl` grows with every run, and the extractor gets prior failure traces as context. If ORB has failed to compile three times due to ambiguous exit rules, the next ORB extraction knows that. The system gets more reliable over time, not by learning what's profitable, but by learning where the operationalization breaks down.
 
-```bash
-# install
-pip install -e .
-
-# one-shot CLI: prints the report to stdout AND saves the full bundle to runs/<run_id>/
-python -m agent_research_lab.orchestrate "https://www.youtube.com/watch?v=..."
-
-# with timeframe override (test indicator claims on 1H, 4H, Daily, Weekly)
-python -m agent_research_lab.orchestrate "https://youtu.be/..." --timeframe 60,240,D,W
-
-# scan a claim across an entire watchlist
-python -m agent_research_lab.orchestrate "https://youtu.be/..." --watchlist nifty50
-
-# long-running Telegram listener
-python -m agent_research_lab.telegram_bot
-```
-
-Every CLI run saves a full artifact bundle under `runs/<run_id>/`:
-
-| File | Contents |
-|------|----------|
-| `input.md` | URL + run timestamp |
-| `transcript.txt` | fetched transcript |
-| `summary.json` | what kind of video this is |
-| `thesis.json` | extracted claims |
-| `report.md` | the human-readable report |
-| `report.json` | the structured report |
-| `trace.jsonl` | step-by-step trace |
-| `strategy_<id>.pine` | synthesized Pine Script (strategy claims only) |
-
-`runs/` is gitignored; the committed polished version of the same bundle layout lives in `examples/`.
-
-**Watchlists** — `--watchlist <name>` scans all testable claims across a predefined symbol list:
-
-| Name | Symbols |
-|------|---------|
-| `default` | 16 cross-market essentials: SPX, NDX, DJI, DAX, NIFTY, BTCUSD, ETHUSD, EURUSD, XAUUSD, USOIL, and more |
-| `nifty50` | 50 Nifty 50 constituents (NSE India) |
-| `sp500` | 50 S&P 500 large-caps |
-| `crypto` | 10 major crypto pairs |
-| `forex` | 10 major FX pairs |
-| `commodities` | 8 commodities |
-
-**LLM backend — no API key required.** The pipeline needs an LLM for thesis extraction and Pine synthesis. It auto-detects, in order:
-
-1. the **`claude` CLI** on your PATH (Claude Code) — uses your existing subscription, no key needed. **This is the default.**
-2. `ANTHROPIC_API_KEY` set — Anthropic API (`pip install 'agent-research-lab[anthropic]'`)
-3. `GEMINI_API_KEY` set — Gemini API, whose free tier covers this workload (`pip install 'agent-research-lab[gemini]'`)
-
-Force a backend with `AGENT_RESEARCH_LAB_LLM={claude_cli,anthropic,gemini}`. See `src/agent_research_lab/llm.py`.
-
-**Other config:** copy `.env.example` → `.env`. For the Telegram listener you need `TELEGRAM_BOT_TOKEN`. For validation runs you need a running TradingView MCP — set `TRADINGVIEW_MCP_CMD` to the command that launches it (or leave empty and validation steps will honestly report "untestable — MCP not configured"). `config.yml` controls which test types are enabled, default timeframes, and all verdict thresholds.
+---
 
 ## Examples
 
-[`examples/`](examples/) contains real YouTube trading videos run through the pipeline — transcript, extracted claims, validation run, final report, and full trace. Read one to see exactly what the agent did and decided.
+[`examples/`](examples/) has real YouTube trading videos run through the full pipeline. Each folder is a complete run: transcript, extracted claims, validation, report, and trace. Read one to see exactly what the system did and why.
 
 | Example | Video type | Verdict |
 |---------|-----------|---------|
@@ -226,35 +168,64 @@ Force a backend with `AGENT_RESEARCH_LAB_LLM={claude_cli,anthropic,gemini}`. See
 | [07 — ICT key levels framework](examples/07_ict_key_levels_educational/) | Educational framework | untestable — teaching a methodology, no specific claim |
 | [08 — SPY 200-day SMA support](examples/08_spy_200sma_support_holds/) | Indicator claim | **holds** — 73% of 52 occurrences, above 65% threshold |
 
-## Status
+---
 
-v1. Working end-to-end. Built solo. Iterating publicly.
+## Running it
 
-## What this is not
+```bash
+# install
+pip install -e .
 
-This repo does not contain:
-- live trading or exchange execution
-- a strategy library or indicator zoo
-- autonomous profit claims
-- multi-agent complexity for its own sake
+# one-shot: prints the report and saves the full bundle to runs/<run_id>/
+python -m agent_research_lab.orchestrate "https://www.youtube.com/watch?v=..."
 
-Those would lower the quality of what's here.
+# test indicator claims across multiple timeframes
+python -m agent_research_lab.orchestrate "https://youtu.be/..." --timeframe 60,240,D,W
 
-## What makes this different from "AI summarizes YouTube"
+# scan a claim across an entire watchlist
+python -m agent_research_lab.orchestrate "https://youtu.be/..." --watchlist nifty50
 
-Most AI video tools summarize what the creator *said*. This system evaluates whether what they said is *true* — against real market data, by explicit rules, with documented uncertainty.
+# run the Telegram bot
+python -m agent_research_lab.telegram_bot
+```
 
-The difference is epistemic. Summarization is retrieval. Validation is reasoning under uncertainty with a defined decision procedure. The report doesn't just reflect the video; it interrogates it.
+**No API key needed by default.** The pipeline auto-detects an LLM backend in this order:
 
-This also means the system can be wrong in a useful way. If a claim fails validation, the report shows the rate, the sample size, and the threshold. You can see exactly why — and decide whether you trust the threshold. An AI summary cannot be wrong in a useful way; it just reflects the source.
+1. The `claude` CLI on your PATH (Claude Code) — uses your existing subscription
+2. `ANTHROPIC_API_KEY` set — `pip install 'agent-research-lab[anthropic]'`
+3. `GEMINI_API_KEY` set — free tier works — `pip install 'agent-research-lab[gemini]'`
 
-## Why this exists
+For the Telegram bot, set `TELEGRAM_BOT_TOKEN` in `.env`. For live validation, set `TRADINGVIEW_MCP_CMD` to the command that launches your TradingView MCP. Without it, validation steps return `untestable — MCP not configured` and everything else still runs fine.
 
-I build autonomous research and validation systems. This repo is a public, end-to-end demonstration of how I approach it: separate the testable from the untestable, validate against real data, handle every failure mode explicitly, and leave a trace someone else can read.
+Copy `.env.example` → `.env` to get started. `config.yml` controls timeframes, verdict thresholds, and which test types are enabled.
 
-The trading domain is incidental. The engineering pattern — and the operational honesty — is the point.
+Watchlists available with `--watchlist`:
 
-— [R Sai Pavan](https://www.linkedin.com/in/sai-pavan-86635b23/) · saipavan.pilot1@gmail.com
+| Name | What it is |
+|------|-----------|
+| `default` | 16 cross-market symbols: SPX, NDX, DJI, DAX, NIFTY, BTCUSD, ETHUSD, EURUSD, XAUUSD, USOIL, and more |
+| `nifty50` | 50 Nifty 50 constituents (NSE India) |
+| `sp500` | 50 S&P 500 large-caps |
+| `crypto` | 10 major crypto pairs |
+| `forex` | 10 major FX pairs |
+| `commodities` | 8 commodities |
+
+---
+
+## What this isn't
+
+No live trading. No exchange connections. No strategy library. No "AI finds profitable setups." Adding any of that would make this a worse repo, not a better one.
+
+---
+
+## Docs
+
+- [`docs/decision_logic.md`](docs/decision_logic.md) — how the system decides what counts as a testable claim and which test type to run
+- [`docs/validation_logic.md`](docs/validation_logic.md) — what the validation actually does, what it can and can't conclude
+- [`docs/failure_handling.md`](docs/failure_handling.md) — every failure mode documented: no transcript, ambiguous claim, MCP error, compile failure — what happens and why
+- [`docs/architecture.md`](docs/architecture.md) — module boundaries, data contracts, the compile-repair loop design
+
+---
 
 ## License
 
