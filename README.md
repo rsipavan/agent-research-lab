@@ -12,6 +12,33 @@ It's not a trading bot. It doesn't generate signals or execute trades. The domai
 
 ---
 
+## What this looks like in practice
+
+The ICT Silver Bullet strategy has fully mechanical rules: liquidity sweep of a prior session high or low, followed by a displacement candle, a market structure shift, and a retracement entry into the fair value gap. Stop above/below the first FVG candle. Target 2:1 or the opposing liquidity level. Minimum 15 pips (forex) or 10 points (indices).
+
+The extractor formalized all of it. Then it stopped.
+
+```
+Claim extracted:
+  During 3–4 AM, 10–11 AM, and 2–3 PM New York time: enter on a retracement into a
+  fair value gap following a liquidity sweep + displacement candle + market structure
+  shift. Stop above/below the first FVG candle. Target 2:1 or opposing liquidity
+  (min 15 pips forex / 10 points indices).
+  → test_type: strategy_backtest | testable: no
+
+Why not tested:
+  Entry, stop, and target rules are fully mechanical and testable, but no specific
+  instrument is named — "forex" and "indices" are categories, not tickers.
+```
+
+It did not guess EURUSD. It did not guess ES1!. It did not fabricate a win rate. It said what it knew and stopped.
+
+That's the epistemic floor. The pipeline only backtests what the video actually specified. A claim that is missing a required input — instrument, timeframe, or measurable outcome — gets classified `untestable` with one sentence explaining exactly what's missing.
+
+This matters because the alternative — assuming EURUSD, synthesizing a Pine Script, reporting "67% win rate" — would be a hallucination with a confidence interval attached. The system is designed to produce fewer results, not more confident ones.
+
+---
+
 ## What you need before running this
 
 **Python 3.10+** — check with `python --version`.
@@ -101,7 +128,7 @@ flowchart LR
     C --> D{testable?}
     D -- no --> R2[Report:<br/>summary + claims +<br/>why untestable]
     D -- indicator/level --> E[validate.run<br/>TradingView MCP]
-    D -- strategy_backtest --> P[pine.run<br/>LLM → Pine v6 → compile → backtest]
+    D -- strategy_backtest --> P[pine.run<br/>LLM → Pine v5 → compile → backtest]
     E --> F[report.build<br/>summary + computed verdicts]
     P --> F
     R1 --> G[Telegram reply<br/>+ chart screenshot]
@@ -142,7 +169,7 @@ src/trading_hypothesis_lab/
 ├── summarize.py       # transcript → "what kind of video is this?" (runs first; routes the pipeline)
 ├── thesis.py          # transcript + summary → testable claims (via llm.py); injects prior failure traces
 ├── validate.py        # claim → validation run via TradingView MCP (indicator/level claims)
-├── pine.py            # claim → Pine Script v6 → compile → backtest → ValidationRun (strategy claims)
+├── pine.py            # claim → Pine Script v5 → compile → backtest → ValidationRun (strategy claims)
 ├── report.py          # summary + validation runs → report (verdicts computed, not LLM-judged)
 ├── orchestrate.py     # the sequential pipeline; logs each step to traces/; fires step callbacks
 ├── knowledge.py       # pattern-aware validation memory: operationalization failure traces, hypothesis mutation
