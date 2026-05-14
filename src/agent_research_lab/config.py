@@ -38,6 +38,8 @@ class Config:
     mcp_timeout_seconds: int
     tracing_enabled: bool
     tracing_dir: str
+    runs_enabled: bool
+    runs_dir: str
 
     def test_type_enabled(self, test_type: str) -> bool:
         return bool(self.test_types.get(test_type, False))
@@ -54,6 +56,7 @@ def load_config(config_path: Path | None = None) -> Config:
     extraction = raw.get("extraction", {})
     validation = raw.get("validation", {})
     tracing = raw.get("tracing", {})
+    outputs = raw.get("outputs", {})
 
     return Config(
         telegram_bot_token=os.getenv("TELEGRAM_BOT_TOKEN", ""),
@@ -76,6 +79,8 @@ def load_config(config_path: Path | None = None) -> Config:
         mcp_timeout_seconds=int(validation.get("mcp_timeout_seconds", 60)),
         tracing_enabled=bool(tracing.get("enabled", True)),
         tracing_dir=tracing.get("dir", "traces"),
+        runs_enabled=bool(outputs.get("save_runs", True)),
+        runs_dir=outputs.get("runs_dir", "runs"),
     )
 
 

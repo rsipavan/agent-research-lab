@@ -88,12 +88,21 @@ Each module has one job, a small typed interface, and can be tested in isolation
 # install
 pip install -e .
 
-# one-shot CLI (used to build the examples/)
+# one-shot CLI: prints the report to stdout AND saves the full bundle to runs/<run_id>/
+#   runs/<run_id>/input.md         the URL + run timestamp
+#   runs/<run_id>/transcript.txt   the fetched transcript
+#   runs/<run_id>/summary.json     what kind of video this is
+#   runs/<run_id>/thesis.json      extracted claims (if any)
+#   runs/<run_id>/report.md        the report
+#   runs/<run_id>/report.json      the structured form
+#   runs/<run_id>/trace.jsonl      step-by-step trace
 python -m agent_research_lab.orchestrate "https://www.youtube.com/watch?v=..."
 
 # long-running Telegram listener
 python -m agent_research_lab.telegram_bot
 ```
+
+`runs/` is gitignored; the committed polished version of the same bundle layout lives in `examples/`.
 
 **LLM backend — no API key required.** The pipeline needs an LLM for thesis extraction
 (and an optional report-narration step). It auto-detects, in order:

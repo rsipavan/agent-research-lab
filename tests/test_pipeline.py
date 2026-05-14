@@ -32,6 +32,7 @@ def _config(**overrides) -> Config:
         default_timeframe="1D", default_lookback_days=365, symbol_fallback=None,
         max_claims_per_video=3, min_confidence=0.5, mcp_retries=1, mcp_timeout_seconds=60,
         tracing_enabled=False, tracing_dir="traces",
+        runs_enabled=False, runs_dir="runs",
     )
     base.update(overrides)
     return Config(**base)

@@ -28,3 +28,10 @@ validation:
 tracing:
   enabled: true
   dir: "traces"            # ad-hoc runs go here (gitignored); example runs are committed under examples/
+
+# Per-run output bundles. Every CLI run writes its artifacts under runs/<run_id>/ —
+# input.md, transcript.txt, summary.json, thesis.json, report.md, report.json, trace.jsonl.
+# The dir is gitignored; examples/ is the committed polished version of the same shape.
+outputs:
+  save_runs: true
+  runs_dir: "runs"

@@ -20,6 +20,11 @@ venv/
 traces/*.jsonl
 !traces/.gitkeep
 
+# per-run output bundles (committed polished examples live in examples/;
+# ad-hoc runs land in runs/<run_id>/ and are ignored)
+runs/*
+!runs/.gitkeep
+
 # editor / OS
 .vscode/
 .idea/
