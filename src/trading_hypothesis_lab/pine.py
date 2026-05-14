@@ -113,7 +113,11 @@ def run(
     # Free TradingView only shows ~5 000 bars, so short timeframes have very little
     # history. 15m → 1H → 1D gives progressively more data without changing the
     # instrument, and the strategy logic is timeframe-agnostic (RSI + price swings).
-    _TF_FALLBACKS = {"1": "5", "5": "15", "15": "60", "60": "240", "240": "D"}
+    # Both claim format (15m, 1H, 4H, 1D) and TV-native format (15, 60, 240, D).
+    _TF_FALLBACKS = {
+        "1m": "5m",  "5m": "15m",  "15m": "1H",  "1H": "4H",  "4H": "1D",
+        "1":  "5",   "5":  "15",   "15":  "60",  "60": "240", "240": "D",
+    }
     tried_timeframes = [timeframe]
     metrics: StrategyBacktestMetrics | None = None
     actual_tf = timeframe
