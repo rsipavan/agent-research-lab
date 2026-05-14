@@ -1,5 +1,5 @@
 [project]
-name = "agent-research-lab"
+name = "trading-hypothesis-lab"
 version = "0.1.0"
 description = "Autonomous research and validation pipeline: YouTube trading claims → tested against real market data via TradingView MCP → structured, traced reports."
 readme = "README.md"
@@ -26,7 +26,7 @@ all = ["anthropic>=0.40.0", "google-generativeai>=0.8.0"]
 dev = ["pytest>=8.0", "ruff>=0.6"]
 
 [project.scripts]
-agent-research-lab = "agent_research_lab.orchestrate:main"
+trading-hypothesis-lab = "trading_hypothesis_lab.orchestrate:main"
 
 [build-system]
 requires = ["setuptools>=68"]

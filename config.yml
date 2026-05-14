@@ -1,4 +1,4 @@
-# agent-research-lab configuration.
+# trading-hypothesis-lab configuration.
 # Personal/secret values go in .env, not here. This file is committed.
 
 # Which validation test types are enabled. Disabling one means claims that map

@@ -7,7 +7,7 @@ Agentic flow per request:
   4. Full report — sent as chunked text after all visual assets
   5. Pine Script files — sent as document attachments (drop into TradingView)
 
-Run: python -m agent_research_lab.telegram_bot
+Run: python -m trading_hypothesis_lab.telegram_bot
 Needs TELEGRAM_BOT_TOKEN in .env. Optionally TELEGRAM_ALLOWLIST (comma-separated user IDs).
 
 See docs/failure_handling.md for the input-validation and send-failure behavior.
@@ -26,7 +26,7 @@ from .orchestrate import RunAborted, process
 from .transcript import extract_video_id
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
-log = logging.getLogger("agent_research_lab.telegram_bot")
+log = logging.getLogger("trading_hypothesis_lab.telegram_bot")
 
 try:  # pragma: no cover
     from telegram import Update
@@ -380,7 +380,7 @@ def main() -> int:
     config = load_config()
     app = _build_app(config)
     log.info(
-        "agent-research-lab telegram bot starting%s",
+        "trading-hypothesis-lab telegram bot starting%s",
         f" (allowlist: {config.telegram_allowlist})" if config.telegram_allowlist else " (open — no allowlist set)",
     )
     app.run_polling()

@@ -4,11 +4,11 @@ Usage
 -----
 From the CLI (see orchestrate.py --watchlist):
 
-    python -m agent_research_lab.orchestrate <youtube-url> --watchlist nifty50
+    python -m trading_hypothesis_lab.orchestrate <youtube-url> --watchlist nifty50
 
 Programmatically:
 
-    from agent_research_lab.watchlist import get_watchlist, run_watchlist
+    from trading_hypothesis_lab.watchlist import get_watchlist, run_watchlist
     symbols = get_watchlist("nifty50")
     results = run_watchlist(claim, symbols, config, mcp)
     # results: {symbol: list[ValidationRun]}

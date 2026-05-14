@@ -22,8 +22,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from agent_research_lab.config import repo_root  # noqa: E402
-from agent_research_lab.orchestrate import RunAborted, process  # noqa: E402
+from trading_hypothesis_lab.config import repo_root  # noqa: E402
+from trading_hypothesis_lab.orchestrate import RunAborted, process  # noqa: E402
 
 # (folder slug, youtube url, why-this-video note)
 EXAMPLES = [

@@ -5,9 +5,9 @@ in this order:
 
   1. `claude` CLI on PATH (Claude Code) — runs `claude -p` in print mode using your
      existing subscription. No API key needed. This is the default.
-  2. ANTHROPIC_API_KEY set — Anthropic Python SDK (`pip install agent-research-lab[anthropic]`).
+  2. ANTHROPIC_API_KEY set — Anthropic Python SDK (`pip install trading-hypothesis-lab[anthropic]`).
   3. GEMINI_API_KEY set — google-generativeai, gemini-2.0-flash, whose free tier
-     comfortably covers this workload (`pip install agent-research-lab[gemini]`).
+     comfortably covers this workload (`pip install trading-hypothesis-lab[gemini]`).
   4. Nothing available — raise LlmUnavailable with a clear message.
 
 Force a backend with the env var AGENT_RESEARCH_LAB_LLM in {claude_cli, anthropic, gemini}.
@@ -65,8 +65,8 @@ def complete(system: str, prompt: str, *, model: str | None = None, max_tokens: 
         raise LlmUnavailable(
             "no LLM backend available. Either:\n"
             "  - install the Claude Code CLI (`claude` on PATH) — no API key needed, or\n"
-            "  - set ANTHROPIC_API_KEY (pip install 'agent-research-lab[anthropic]'), or\n"
-            "  - set GEMINI_API_KEY (pip install 'agent-research-lab[gemini]')"
+            "  - set ANTHROPIC_API_KEY (pip install 'trading-hypothesis-lab[anthropic]'), or\n"
+            "  - set GEMINI_API_KEY (pip install 'trading-hypothesis-lab[gemini]')"
         )
     if backend == "claude_cli":
         return _complete_claude_cli(system, prompt, model=model, timeout=timeout)
@@ -137,7 +137,7 @@ def _complete_anthropic(system: str, prompt: str, *, model: str | None, max_toke
     try:
         import anthropic
     except ImportError as e:  # pragma: no cover
-        raise LlmUnavailable("anthropic SDK not installed — pip install 'agent-research-lab[anthropic]'") from e
+        raise LlmUnavailable("anthropic SDK not installed — pip install 'trading-hypothesis-lab[anthropic]'") from e
     key = os.getenv("ANTHROPIC_API_KEY")
     if not key:  # pragma: no cover - guarded
         raise LlmUnavailable("ANTHROPIC_API_KEY not set")
@@ -166,7 +166,7 @@ def _complete_gemini(system: str, prompt: str, *, max_tokens: int) -> str:
     try:
         import google.generativeai as genai
     except ImportError as e:  # pragma: no cover
-        raise LlmUnavailable("google-generativeai not installed — pip install 'agent-research-lab[gemini]'") from e
+        raise LlmUnavailable("google-generativeai not installed — pip install 'trading-hypothesis-lab[gemini]'") from e
     key = os.getenv("GEMINI_API_KEY")
     if not key:  # pragma: no cover - guarded
         raise LlmUnavailable("GEMINI_API_KEY not set")

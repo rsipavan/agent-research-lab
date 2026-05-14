@@ -1,6 +1,6 @@
-# agent-research-lab
+# trading-hypothesis-lab
 
-![tests](https://github.com/rsipavan/agent-research-lab/actions/workflows/test.yml/badge.svg)
+![tests](https://github.com/rsipavan/TradingHypothesisLab/actions/workflows/test.yml/badge.svg)
 
 I got tired of watching trading videos that confidently claim a strategy "works consistently" with nothing to back it up. So I built a system that checks.
 
@@ -39,7 +39,7 @@ Once installed, run `claude` once to authenticate with your Anthropic account. N
 
 ```bash
 pip install -e .
-python -m agent_research_lab.orchestrate "https://www.youtube.com/watch?v=..."
+python -m trading_hypothesis_lab.orchestrate "https://www.youtube.com/watch?v=..."
 ```
 
 What happens:
@@ -136,7 +136,7 @@ flowchart LR
 ## Code layout
 
 ```
-src/agent_research_lab/
+src/trading_hypothesis_lab/
 ├── telegram_bot.py    # input/output edge: listens for YouTube URLs, sends live progress + charts + report
 ├── transcript.py      # YouTube transcript fetch + clean
 ├── summarize.py       # transcript → "what kind of video is this?" (runs first; routes the pipeline)
@@ -200,23 +200,23 @@ A few things I kept coming back to while building this:
 pip install -e .
 
 # one-shot: prints the report and saves the full bundle to runs/<run_id>/
-python -m agent_research_lab.orchestrate "https://www.youtube.com/watch?v=..."
+python -m trading_hypothesis_lab.orchestrate "https://www.youtube.com/watch?v=..."
 
 # test indicator claims across multiple timeframes
-python -m agent_research_lab.orchestrate "https://youtu.be/..." --timeframe 60,240,D,W
+python -m trading_hypothesis_lab.orchestrate "https://youtu.be/..." --timeframe 60,240,D,W
 
 # scan a claim across an entire watchlist
-python -m agent_research_lab.orchestrate "https://youtu.be/..." --watchlist nifty50
+python -m trading_hypothesis_lab.orchestrate "https://youtu.be/..." --watchlist nifty50
 
 # run the Telegram bot
-python -m agent_research_lab.telegram_bot
+python -m trading_hypothesis_lab.telegram_bot
 ```
 
 **No API key needed by default.** The pipeline auto-detects an LLM backend in this order:
 
 1. The `claude` CLI on your PATH ([Claude Code](https://claude.ai/code)) — uses your existing subscription, no key needed
-2. `ANTHROPIC_API_KEY` set — `pip install 'agent-research-lab[anthropic]'`
-3. `GEMINI_API_KEY` set — free tier works fine — `pip install 'agent-research-lab[gemini]'`
+2. `ANTHROPIC_API_KEY` set — `pip install 'trading-hypothesis-lab[anthropic]'`
+3. `GEMINI_API_KEY` set — free tier works fine — `pip install 'trading-hypothesis-lab[gemini]'`
 
 For the Telegram bot, set `TELEGRAM_BOT_TOKEN` in `.env`. For live validation, set `TRADINGVIEW_MCP_CMD` to the command that launches your TradingView MCP. Without it, validation steps return `untestable — MCP not configured` and everything else still runs fine.
 

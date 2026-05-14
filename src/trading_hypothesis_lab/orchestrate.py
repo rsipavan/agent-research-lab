@@ -2,7 +2,7 @@
 failure (no transcript, extraction failure) becomes an aborted run with a
 user-facing message instead of a half-report.
 
-Also the CLI entrypoint (`python -m agent_research_lab.orchestrate <url>`) — that's
+Also the CLI entrypoint (`python -m trading_hypothesis_lab.orchestrate <url>`) — that's
 how the examples/ in this repo were built.
 
 See docs/architecture.md and docs/failure_handling.md.
@@ -379,7 +379,7 @@ def main(argv: list[str] | None = None) -> int:
 
     argv = list(sys.argv[1:] if argv is None else argv)
     if not argv or argv[0] in ("-h", "--help"):
-        print("usage: python -m agent_research_lab.orchestrate <youtube-url> [options]")
+        print("usage: python -m trading_hypothesis_lab.orchestrate <youtube-url> [options]")
         print()
         print("  Runs the pipeline on one video, prints the report to stdout,")
         print("  and saves the full artifact bundle under runs/<run_id>/.")
@@ -403,9 +403,9 @@ def main(argv: list[str] | None = None) -> int:
         print("  Monthly : M  (alias: 1M, monthly)")
         print()
         print("Examples:")
-        print("  python -m agent_research_lab.orchestrate 'https://youtu.be/...'")
-        print("  python -m agent_research_lab.orchestrate 'https://youtu.be/...' --timeframe D,4H,1H")
-        print("  python -m agent_research_lab.orchestrate 'https://youtu.be/...' --watchlist nifty50 --timeframe D")
+        print("  python -m trading_hypothesis_lab.orchestrate 'https://youtu.be/...'")
+        print("  python -m trading_hypothesis_lab.orchestrate 'https://youtu.be/...' --timeframe D,4H,1H")
+        print("  python -m trading_hypothesis_lab.orchestrate 'https://youtu.be/...' --watchlist nifty50 --timeframe D")
         return 0
 
     # Parse flags

@@ -25,10 +25,10 @@ from pathlib import Path
 # Make the src package importable when run from the repo root or scripts/
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from agent_research_lab import pine as pine_mod
-from agent_research_lab.config import load_config
-from agent_research_lab.mcp_client import McpClient
-from agent_research_lab.types import Claim, Transcript
+from trading_hypothesis_lab import pine as pine_mod
+from trading_hypothesis_lab.config import load_config
+from trading_hypothesis_lab.mcp_client import McpClient
+from trading_hypothesis_lab.types import Claim, Transcript
 
 
 # ---------------------------------------------------------------------------
@@ -117,7 +117,7 @@ def main() -> int:
         video_id="orb-test",
         url="synthetic://orb-strategy-test",
         title="Opening Range Breakout Strategy",
-        channel="agent-research-lab test",
+        channel="trading-hypothesis-lab test",
         text=_ORB_TRANSCRIPT,
     )
 

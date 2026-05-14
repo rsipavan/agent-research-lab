@@ -139,7 +139,7 @@ class _StdioTransport(_Transport):
             "params": {
                 "protocolVersion": "2024-11-05",
                 "capabilities": {},
-                "clientInfo": {"name": "agent-research-lab", "version": "0.1.0"},
+                "clientInfo": {"name": "trading-hypothesis-lab", "version": "0.1.0"},
             },
         })
         init = self._read_until_response(self._last_id, timeout=_INIT_TIMEOUT)

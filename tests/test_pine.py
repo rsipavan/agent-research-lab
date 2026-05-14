@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import pytest
 
-from agent_research_lab import pine as pine_mod
-from agent_research_lab.types import Claim, StrategyBacktestMetrics
+from trading_hypothesis_lab import pine as pine_mod
+from trading_hypothesis_lab.types import Claim, StrategyBacktestMetrics
 
 
 def _claim(**kwargs) -> Claim:

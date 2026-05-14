@@ -1,4 +1,4 @@
-"""agent-research-lab — autonomous research and validation pipeline.
+"""trading-hypothesis-lab — autonomous research and validation pipeline.
 
 YouTube trading claims -> extracted, classified for testability -> validated
 against real market data via the TradingView MCP -> structured, traced reports.

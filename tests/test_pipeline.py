@@ -12,13 +12,13 @@ from __future__ import annotations
 
 import pytest
 
-from agent_research_lab import report as report_mod
-from agent_research_lab import summarize as summarize_mod
-from agent_research_lab import thesis as thesis_mod
-from agent_research_lab import validate as validate_mod
-from agent_research_lab.config import Config
-from agent_research_lab.transcript import extract_video_id
-from agent_research_lab.types import Claim, ThesisSet, Transcript, ValidationRun, VideoSummary
+from trading_hypothesis_lab import report as report_mod
+from trading_hypothesis_lab import summarize as summarize_mod
+from trading_hypothesis_lab import thesis as thesis_mod
+from trading_hypothesis_lab import validate as validate_mod
+from trading_hypothesis_lab.config import Config
+from trading_hypothesis_lab.transcript import extract_video_id
+from trading_hypothesis_lab.types import Claim, ThesisSet, Transcript, ValidationRun, VideoSummary
 
 
 # --------------------------------------------------------------------------- config fixture
@@ -173,7 +173,7 @@ def test_verdict_partial_when_timeframes_disagree():
 
 def _finding(verdict):
     claim = Claim("c", "x", "SPY", "1D", "indicator_value_over_range", "yes", None, 0.9)
-    from agent_research_lab.types import ClaimFinding
+    from trading_hypothesis_lab.types import ClaimFinding
     return ClaimFinding(claim=claim, validations=[], verdict=verdict, verdict_reason="")
 
 
