@@ -369,12 +369,25 @@ def _parse_timeframes(raw: str) -> list[str]:
 def main(argv: list[str] | None = None) -> int:
     # Force UTF-8 stdout/stderr so reports render correctly regardless of the
     # console codepage (Windows defaults to cp1252, which mangles em-dashes etc.).
+    # errors="replace" is the fallback: if a character truly can't be rendered,
+    # print a ? rather than crashing the whole run.
+    import io as _io
     for stream_name in ("stdout", "stderr"):
         stream = getattr(sys, stream_name, None)
-        if stream is not None and hasattr(stream, "reconfigure"):
+        if stream is None:
+            continue
+        if hasattr(stream, "reconfigure"):
             try:
-                stream.reconfigure(encoding="utf-8")
+                stream.reconfigure(encoding="utf-8", errors="replace")
+                continue
             except (AttributeError, OSError, ValueError):
+                pass
+        # Fallback for older Python / unusual consoles: wrap the buffer directly.
+        if hasattr(stream, "buffer"):
+            try:
+                setattr(sys, stream_name,
+                        _io.TextIOWrapper(stream.buffer, encoding="utf-8", errors="replace"))
+            except Exception:  # noqa: BLE001
                 pass
 
     argv = list(sys.argv[1:] if argv is None else argv)

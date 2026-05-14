@@ -49,7 +49,7 @@ For each candidate claim, classify it:
 Then assign a test_type for `yes`/`partial` claims:
 - "indicator_value_over_range" — "indicator X behaves like Y over timeframe Z" (RSI, MACD, MA cross, BB, etc.)
 - "level_zone_hit_rate" — "price respects level/zone L" (support/resistance, POC, VWAP, round numbers, prior high/low)
-- "strategy_backtest" — "strategy S (full entry+exit rules) is profitable" — note: not implemented in v1, but classify it correctly anyway
+- "strategy_backtest" — a strategy with defined mechanical entry AND exit rules on a named instrument. If the video gives entry trigger + stop + target (even if the logic involves divergence, swing points, or multi-condition filters), this is the right type. Pine Script can implement any mechanical rule — do not downgrade to "no" just because the logic is complex.
 - "none" — a `yes`/`partial` claim that no test type maps to. For `no` claims, use "none".
 
 Also give:
@@ -185,6 +185,17 @@ def _apply_gates(claims: list[Claim], config: Config) -> list[Claim]:
                 c.testable = "no"
                 c.reason_if_not = (c.reason_if_not or "") + " (downgraded: low extraction confidence)"
         downgraded.append(c)
+
+    # 1b. Self-contradiction repair: testable=="no" + test_type!="none" + reason_if_not is None
+    #     means the LLM assigned a test type and justified it but forgot to flip testable.
+    #     Upgrade to "partial" so validation runs rather than silently dropping the claim.
+    for c in downgraded:
+        if (c.testable == "no"
+                and c.test_type != "none"
+                and not c.reason_if_not
+                and c.test_type_justification):
+            c.testable = "partial"
+            c.reason_if_not = "testability uncertain — attempting validation"
 
     # 2. Disabled test types: a yes/partial claim mapping to a disabled type -> still
     #    "testable" in shape, but validate.py will return untestable(test type disabled).
