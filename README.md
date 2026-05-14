@@ -2,6 +2,8 @@
 
 **Designing reliable autonomous research and validation systems under uncertainty.**
 
+*By [R Sai Pavan](https://www.linkedin.com/in/sai-pavan-86635b23/) — applied-quant operator running autonomous live trading systems on Indian options markets. This repo is a public, end-to-end demonstration of how I design autonomous research systems.*
+
 You DM a YouTube URL to a Telegram bot. An agent fetches the transcript, characterizes the video, extracts the *testable* trading claim(s), runs a defined validation against real market data via the TradingView MCP, produces a structured report — what the video is, the claims, what was tested, the data, the result, the caveats, a verdict — and replies. Every step is traced. Every failure mode is handled and documented.
 
 This is a small, focused system. It is deliberately small. The interesting part is not "AI watches YouTube videos" — it's the orchestration, the decision logic for *what is even testable*, the validation layer, the failure-aware workflow, and the observability trail. The pattern transfers to any autonomous-research problem; the domain here happens to be trading content.
