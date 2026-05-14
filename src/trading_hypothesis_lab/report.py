@@ -482,7 +482,7 @@ def _claim_card_md(finding: ClaimFinding, idx: int, total: int, t: _Thresholds |
         tf = claim.timeframe or "?"
         lines.append(
             f"Full strategy backtest | {sym} | {tf} | "
-            f"Pine Script v6, TradingView strategy tester"
+            f"Pine Script v5, TradingView strategy tester"
         )
     elif len(valid_runs) == 1:
         v = valid_runs[0]

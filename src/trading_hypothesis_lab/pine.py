@@ -74,6 +74,12 @@ def run(
         out_dir.mkdir(parents=True, exist_ok=True)
         (out_dir / f"draft_synthesis_{claim.id}.pine").write_text(script, encoding="utf-8")
 
+    # Clear existing chart studies before loading the strategy. Free TradingView
+    # accounts have an indicator cap (~3 studies). If prior studies are on the chart,
+    # pine_smart_compile will succeed (no errors) but the strategy won't appear —
+    # leaving the strategy tester empty and reporting 0 trades.
+    _clear_chart_indicators(mcp)
+
     # --- step 2: compile (with self-repair loop) ---
     script, errors = _compile_and_fix(script, mcp, config, draft_dir=out_dir, claim_id=claim.id)
 
@@ -247,6 +253,40 @@ def _synthesize(
         result = re.sub(r"^```\w*\n?", "", result)
         result = re.sub(r"\n?```$", "", result)
     return result.strip()
+
+
+# ---------------------------------------------------------------------------
+# chart housekeeping
+# ---------------------------------------------------------------------------
+
+
+def _clear_chart_indicators(mcp: McpClient) -> None:
+    """Remove all studies from the chart before loading a new strategy.
+
+    Free TradingView accounts have an indicator cap. Existing studies from a
+    previous run block the compiled strategy from appearing, which leaves the
+    strategy tester empty (0 trades). Errors are swallowed — if the MCP can't
+    list or remove studies we proceed and let the compile step surface failures.
+    """
+    try:
+        state = mcp.call("chart_get_state", {})
+    except McpError:
+        return
+
+    # chart_get_state field names vary by MCP version — try common variants.
+    indicators: list = (
+        state.get("indicators")
+        or state.get("studies")
+        or (state.get("panes") or [{}])[0].get("indicators", [])
+        or []
+    )
+    for ind in indicators:
+        entity_id = ind.get("id") or ind.get("entityId") or ind.get("entity_id")
+        if entity_id:
+            try:
+                mcp.call("chart_manage_indicator", {"action": "remove", "id": entity_id})
+            except McpError:
+                pass
 
 
 # ---------------------------------------------------------------------------
