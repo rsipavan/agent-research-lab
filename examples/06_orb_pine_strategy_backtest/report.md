@@ -1,9 +1,9 @@
 # Opening Range Breakout (ORB) strategy backtest
 
-*strategy_or_claim | agent-research-lab test*
+*strategy_or_claim | agent-research-lab test*  
 *synthetic://orb-strategy-test*
 
-**Overall: PARTIAL SUPPORT** | mixed results — some claims held up, others were partial or didn't; see per-claim findings
+**Overall: NOT SUPPORTED** | the video's checkable claim(s) did not hold up against the data
 
 ---
 
@@ -21,16 +21,16 @@ The video describes a complete Opening Range Breakout strategy. The opening rang
 
 > Opening Range Breakout (ORB): enter long when price closes above the first-15-minute high, enter short when price closes below the first-15-minute low. Stop at the opposite end of the opening range. Target 1.5x range size. Exit all positions by 3 PM. Strategy works consistently on SPY / liquid ETFs on a 5-minute chart.
 
-**What was checked:**
-Full strategy backtest | SPY | 5 | Pine Script v6, TradingView strategy tester
+**What was checked:**  
+Full strategy backtest | SPY | 5m | Pine Script v5, TradingView strategy tester
 
-**What happened:**
-66 trades executed | Win rate: 48% (32 wins, 34 losses) | Net profit: -4,082.41 | Profit factor: 0.91 | Max drawdown: 6560.31
+**What happened:**  
+66 trades executed | Win rate: 48% (32 wins, 34 losses) | Net profit: -4,082.41 | Profit factor: 0.91 | Max drawdown: 6,560.31
 
 *Script: `strategy_orb-c1.pine` — load into TradingView Pine editor*
 
-**Verdict: PARTIAL SUPPORT**
-partial across 5: 48% of 66
+**Verdict: NOT SUPPORTED**  
+no edge: profit factor 0.91, net profit -4,082.41 over 66 trades
 
 **Caveats:**
 - strategy tester results depend on the instrument, date range, and default capital settings in TradingView
@@ -38,9 +38,10 @@ partial across 5: 48% of 66
 - past performance does not predict future results
 
 ---
-## Overall: PARTIAL SUPPORT
 
-mixed results — some claims held up, others were partial or didn't; see per-claim findings
+## Overall: NOT SUPPORTED
+
+The video's checkable claim(s) did not hold up against the data.
 
 ---
 
@@ -49,8 +50,8 @@ mixed results — some claims held up, others were partial or didn't; see per-cl
 1. **Transcript fetched** from the video
 2. **Video characterized** — content type, topic, whether it makes checkable claims
 3. **Claims extracted** — each tagged with instrument, timeframe, and test type
-4. **Validated** against real market data via TradingView MCP
-5. **Verdicts computed** from the data — not LLM-judged
+4. **Pine Script synthesized** from the verbal strategy description → compiled (0 errors) → strategy tester run
+5. **Verdict computed** from the data — not LLM-judged
 
 ---
 

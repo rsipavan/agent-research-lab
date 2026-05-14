@@ -1,5 +1,5 @@
-{"event": "transcript.fetch", "ok": true, "detail": "fetched 312 words", "ms": 0}
-{"event": "video.summarize", "ok": true, "detail": "strategy_or_claim — 200-day SMA support on SPY daily — checkable claims: yes", "ms": 287}
-{"event": "thesis.extract", "ok": true, "detail": "1 claim(s): 1 testable, 0 not", "ms": 1614}
-{"event": "validate.run", "ok": true, "detail": "[c1] level_zone_hit_rate SPY 1D: 73.1% of 52 occurrences — holds", "ms": 4821, "extra": {"claim_id": "c1"}}
-{"event": "report.build", "ok": true, "detail": "verdict_overall=holds; 1 claim(s)", "ms": 3}
+{"step": "transcript.fetch", "ok": true, "detail": "fetched 312 words", "ms": 0}
+{"step": "video.summarize", "ok": true, "detail": "strategy_or_claim — 200-day SMA support on SPY daily — checkable claims: yes", "ms": 287}
+{"step": "thesis.extract", "ok": true, "detail": "1 claim(s): 1 testable, 0 not", "ms": 1614}
+{"step": "validate.run", "ok": true, "detail": "[c1] level_zone_hit_rate SPY 1D: 73.1% of 52 occurrences — holds", "ms": 4821, "extra": {"claim_id": "c1"}}
+{"step": "report.build", "ok": true, "detail": "verdict_overall=holds; 1 claim(s)", "ms": 3}

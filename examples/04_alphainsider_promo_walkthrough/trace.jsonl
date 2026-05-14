@@ -1,3 +1,3 @@
-{"step": "transcript.fetch", "ok": true, "summary": "fetched 490 words", "ms": 1338}
-{"step": "video.summarize", "ok": true, "summary": "promotion \u2014 Automating TradingView strategy alerts via AlphaInsider platform (checkable claims: no)", "ms": 7546}
-{"step": "report.build", "ok": true, "summary": "summary-only (promotion); no extraction run", "ms": 0}
+{"step": "transcript.fetch", "ok": true, "detail": "fetched 490 words", "ms": 1338}
+{"step": "video.summarize", "ok": true, "detail": "promotion \u2014 Automating TradingView strategy alerts via AlphaInsider platform (checkable claims: no)", "ms": 7546}
+{"step": "report.build", "ok": true, "detail": "summary-only (promotion); no extraction run", "ms": 0}

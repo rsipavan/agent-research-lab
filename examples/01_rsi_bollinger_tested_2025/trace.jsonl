@@ -1,4 +1,4 @@
-{"step": "transcript.fetch", "ok": true, "summary": "fetched 1,244 words", "ms": 1236}
-{"step": "video.summarize", "ok": true, "summary": "strategy_or_claim \u2014 Bollinger Bands + RSI mean-reversion strategy backtest across markets (checkable claims: yes)", "ms": 14127}
-{"step": "thesis.extract", "ok": true, "summary": "3 claim(s): 0 testable, 3 not", "ms": 68778}
-{"step": "report.build", "ok": true, "summary": "verdict_overall=untestable (no testable claims)", "ms": 0}
+{"step": "transcript.fetch", "ok": true, "detail": "fetched 1,244 words", "ms": 1236}
+{"step": "video.summarize", "ok": true, "detail": "strategy_or_claim \u2014 Bollinger Bands + RSI mean-reversion strategy backtest across markets (checkable claims: yes)", "ms": 14127}
+{"step": "thesis.extract", "ok": true, "detail": "3 claim(s): 0 testable, 3 not", "ms": 68778}
+{"step": "report.build", "ok": true, "detail": "verdict_overall=untestable (no testable claims)", "ms": 0}

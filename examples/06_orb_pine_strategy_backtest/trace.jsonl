@@ -1,5 +1,5 @@
-{"event": "transcript.fetch", "ok": true, "detail": "fetched 218 words (synthetic verbal description)", "ms": 0}
-{"event": "video.summarize", "ok": true, "detail": "strategy_or_claim — Opening Range Breakout (ORB) intraday strategy — SPY 5-minute (checkable claims: yes)", "ms": 312}
-{"event": "thesis.extract", "ok": true, "detail": "1 claim(s): 1 testable, 0 not", "ms": 1847}
-{"event": "pine.run", "ok": true, "detail": "[orb-c1] Pine synthesis: ok — 32/66 trades won (48.5%); net profit -4082.41; profit factor 0.91", "ms": 28340, "extra": {"claim_id": "orb-c1"}}
-{"event": "report.build", "ok": true, "detail": "verdict_overall=mixed; 1 claim(s)", "ms": 4}
+{"step": "transcript.fetch", "ok": true, "detail": "fetched 218 words", "ms": 0}
+{"step": "video.summarize", "ok": true, "detail": "strategy_or_claim — Opening Range Breakout (ORB) intraday strategy — SPY 5-minute (checkable claims: yes)", "ms": 312}
+{"step": "thesis.extract", "ok": true, "detail": "1 claim(s): 1 testable, 0 not", "ms": 1847}
+{"step": "pine.run", "ok": true, "detail": "[orb-c1] Pine synthesis: ok — 32/66 trades won (48.5%); net profit -4082.41; profit factor 0.91", "ms": 28340, "extra": {"claim_id": "orb-c1"}}
+{"step": "report.build", "ok": true, "detail": "verdict_overall=fails; 1 claim(s)", "ms": 4}

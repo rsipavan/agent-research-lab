@@ -1,18 +1,31 @@
 {
   "run_id": "orb-strategy-test-20260514",
-  "url": "https://www.youtube.com/watch?v=orb-strategy-test",
-  "verdict_overall": "mixed",
+  "video": {
+    "id": "orb-strategy-test",
+    "url": "synthetic://orb-strategy-test",
+    "title": "Opening Range Breakout (ORB) strategy backtest",
+    "channel": null
+  },
+  "video_summary": {
+    "content_type": "strategy_or_claim",
+    "topic": "Opening Range Breakout (ORB) intraday strategy — SPY 5-minute",
+    "summary": "The video describes a complete Opening Range Breakout strategy. The opening range is defined as the high and low of the first 15 minutes after market open (9:30-9:45 ET). Entries trigger on a close above/below the range with volume confirmation. Stops sit at the opposite end of the range; target is 1.5x the range width. All positions are closed by 3 PM.",
+    "has_checkable_claims": true
+  },
+  "verdict_overall": "fails",
+  "overall_reason": "the video's checkable claim(s) did not hold up against the data",
   "findings": [
     {
       "claim_id": "orb-c1",
       "statement": "Opening Range Breakout (ORB): enter long when price closes above the first-15-minute high, enter short when price closes below the first-15-minute low. Stop at the opposite end of the opening range. Target 1.5x range size. Exit all positions by 3 PM. Strategy works consistently on SPY / liquid ETFs on a 5-minute chart.",
       "instrument": "SPY",
       "timeframe": "5",
-      "test_type": "strategy_backtest",
       "testable": "yes",
+      "test_type": "strategy_backtest",
+      "verdict": "fails",
+      "verdict_reason": "no edge: profit factor 0.91, net profit -4,082.41 over 66 trades",
       "validations": [
         {
-          "test_type": "strategy_backtest",
           "timeframe": "5",
           "status": "ok",
           "tradingview_query": "SPY 5 Pine Strategy (strategy tester)",
@@ -25,11 +38,13 @@
             "commission 0.05% and 1-tick slippage modeled",
             "past performance does not predict future results"
           ],
+          "error": null,
           "strategy_backtest": {
             "net_profit": -4082.41,
-            "win_rate": 0.485,
+            "gross_profit": 3218.50,
             "total_trades": 66,
             "winning_trades": 32,
+            "win_rate": 0.485,
             "max_drawdown": 6560.31,
             "profit_factor": 0.91,
             "pine_script_file": "strategy_orb-c1.pine"

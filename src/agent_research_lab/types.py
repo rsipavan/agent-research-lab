@@ -224,6 +224,6 @@ class TraceEvent:
     extra: dict = field(default_factory=dict)
 
     def to_jsonl(self) -> dict:
-        d = {"step": self.step, "ok": self.ok, "summary": self.summary, "ms": self.ms}
+        d = {"step": self.step, "ok": self.ok, "detail": self.summary, "ms": self.ms}
         d.update(self.extra)
         return d
