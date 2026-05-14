@@ -49,23 +49,29 @@ def run(
     mcp: McpClient,
     *,
     out_dir: Path | None = None,
+    cached_script: str | None = None,
 ) -> ValidationRun:
     """Synthesize, compile, and backtest a Pine Script strategy for `claim`.
 
     `out_dir`: if provided, the .pine file is written there and `vr.pine_script_path`
     is the absolute path. If None, the script is processed in-memory only (useful in
     tests that don't need a real file).
+    `cached_script`: if provided, skip LLM synthesis entirely and compile this script
+    directly. Used when a previous run already produced a good script for this claim.
     """
     instrument = claim.instrument or "SPY"
     timeframe = claim.timeframe or "1D"
 
-    # --- step 1: synthesize ---
-    try:
-        script = _synthesize(claim, transcript, summary, config)
-    except PineSynthesisError as e:
-        return _failed(claim, f"could not synthesize Pine Script — {e}")
-    except llm_mod.LlmUnavailable:
-        return _failed(claim, "could not synthesize Pine Script — LLM unavailable")
+    # --- step 1: synthesize (or reuse cached script) ---
+    if cached_script:
+        script = cached_script
+    else:
+        try:
+            script = _synthesize(claim, transcript, summary, config)
+        except PineSynthesisError as e:
+            return _failed(claim, f"could not synthesize Pine Script — {e}")
+        except llm_mod.LlmUnavailable:
+            return _failed(claim, "could not synthesize Pine Script — LLM unavailable")
 
     # Save the raw synthesis output immediately — before any compile attempts.
     # This is the key crash-safety artifact: if the compile loop fails or the process

@@ -186,10 +186,15 @@ def process(
                 f"Validated [{claim.id}]: {n_ok}/{len(claim_runs)} timeframes OK", n_ok > 0)
 
         for claim in backtest_claims:
+            cached = _find_cached_pine_script(transcript.video_id, claim.id, config)
+            action = "Reusing cached Pine Script" if cached else "Synthesizing Pine Script"
             _cb("pine.run",
-                f"Synthesizing Pine Script for {claim.instrument or '?'} {claim.timeframe or ''}...")
+                f"{action} for {claim.instrument or '?'} {claim.timeframe or ''}...")
             t0 = time.perf_counter()
-            vr = pine_mod.run(claim, transcript, summary, config, mcp, out_dir=run_dir)
+            vr = pine_mod.run(
+                claim, transcript, summary, config, mcp,
+                out_dir=run_dir, cached_script=cached,
+            )
             runs.append(vr)
             trace.append(TraceEvent(
                 "pine.run", vr.status == "ok",
@@ -234,6 +239,31 @@ def _write_trace(config: Config, run_id: str, trace: list[TraceEvent]) -> Path |
         for ev in trace:
             fh.write(json.dumps(ev.to_jsonl()) + "\n")
     return path
+
+
+def _find_cached_pine_script(video_id: str, claim_id: str, config: Config) -> str | None:
+    """Return the text of the most recently compiled Pine Script for this claim, or None.
+
+    Scans runs/<run_id>/ directories whose name starts with the video_id. The compiled
+    script is `strategy_<claim_id>.pine` — not draft files. Returns the newest match so
+    the system always reuses the latest successfully compiled version.
+    """
+    runs_root = repo_root() / config.runs_dir
+    if not runs_root.exists():
+        return None
+    candidates = sorted(
+        runs_root.glob(f"{video_id}-*/strategy_{claim_id}.pine"),
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )
+    for path in candidates:
+        try:
+            text = path.read_text(encoding="utf-8").strip()
+            if text:
+                return text
+        except OSError:
+            continue
+    return None
 
 
 def _write_run_artifacts(
