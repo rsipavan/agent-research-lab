@@ -12,7 +12,7 @@ test_types:
 defaults:
   timeframe: "1D"                       # used if a claim doesn't name a timeframe
   test_timeframes: ["1D", "4H", "1H"]   # validate each claim across multiple timeframes — multi-tf evidence beats single-tf cherry-pick. If the claim specifies a timeframe, that one is used INSTEAD of this list.
-  lookback_days: 365                    # how far back to pull data for a range check
+  lookback_days: 3000                    # how far back to pull data for a range check
   symbol_fallback: null                 # if a claim names no instrument, no fallback — mark untestable
 
 # Thesis extraction.

@@ -44,9 +44,10 @@ EXAMPLES = [
     (
         "03_rsi_divergence_xauusd",
         "https://www.youtube.com/watch?v=aHeWIR8kM9o",
-        "An RSI-divergence-on-XAU/USD video — has a named instrument and a checkable "
-        "relationship. With a TradingView MCP configured this produces a full validation run; "
-        "without one, it shows the 'MCP not configured -> untestable' failure path.",
+        "An RSI-divergence + EMA-200 strategy video. Claims map to strategy_backtest "
+        "(full entry+exit rules with a TradingView backtest) and a math-verification, "
+        "neither of which v1 can test — shows the 'strategy_backtest not in v1' boundary "
+        "even for content that mentions specific instruments and timeframes.",
     ),
     (
         "04_alphainsider_promo_walkthrough",

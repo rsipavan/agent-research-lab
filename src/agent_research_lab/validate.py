@@ -362,9 +362,29 @@ def _guess_trigger(statement: str):
     return ("price", "move", None)
 
 
+_INSTRUMENT_NUMBER_PATTERNS = [
+    r"s&p\s*500", r"nasdaq\s*100", r"nifty\s*50", r"ftse\s*100",
+    r"russell\s*2000", r"dow\s*jones", r"nikkei\s*225", r"dax\s*40",
+    r"cac\s*40", r"hang\s*seng", r"stoxx\s*600", r"midcap\s*150",
+    r"smallcap\s*250", r"bank\s*nifty", r"sensex", r"sp\s*500",
+    # MA-period patterns: "200-day", "50-week", "20-period" etc. — the number is a
+    # period count, not a price level. Strip before scanning for price levels.
+    r"\b\d{1,4}[-\s](?:day|week|month|period|bar|candle)s?\b",
+    r"\b(?:daily|weekly|monthly)\b",
+    # Q1/Q2/Q3/Q4 quarter references and year references contain no price information.
+    r"\bQ[1-4]\b",
+    r"\b20[0-3]\d\b",  # years 2000–2039
+]
+
+
 def _guess_level(statement: str, bars: list[dict]) -> float | None:
     """Extract a numeric level from the claim, or derive one (prior high/low) if it's described, not numbered."""
-    m = re.search(r"(\d{2,7}(?:[.,]\d+)?)", statement.replace(",", ""))
+    # Strip instrument names and MA/period labels that contain numbers so their
+    # ordinals don't get mistaken for price levels.
+    clean = statement
+    for pat in _INSTRUMENT_NUMBER_PATTERNS:
+        clean = re.sub(pat, " ", clean, flags=re.IGNORECASE)
+    m = re.search(r"(\d{2,7}(?:[.,]\d+)?)", clean.replace(",", ""))
     if m:
         try:
             return float(m.group(1))
