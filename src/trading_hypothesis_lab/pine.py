@@ -171,12 +171,12 @@ def run(
             hit_rate=None,
             result=(
                 f"strategy compiled but produced no trades on {instrument} "
-                f"({tfs_tried} tried) — free-plan data window may be too short "
-                f"for this strategy's setup frequency"
+                f"({tfs_tried} tried) — entry conditions never fired in the available history"
             ),
             caveats=[
-                "no trades means entry conditions never fired in the available history",
-                "free TradingView shows ~5 000 bars per timeframe; paid plan has 20 000+",
+                "no trades means the strategy's entry conditions did not occur in the "
+                "available price history — the setup may be rare on this instrument",
+                "try a more volatile instrument or adjust threshold inputs in the .pine file",
             ],
             pine_script_path=pine_path,
         )
@@ -247,6 +247,20 @@ def _synthesize(
     topic = summary.topic if summary else claim.statement
     text_excerpt = transcript.text[:6000]  # keep prompt manageable
 
+    _v5_rules = (
+        "CRITICAL RULES — follow all of these exactly:\n"
+        "1. The VERY FIRST line must be //@version=5  (NOT version=6, NOT any other version)\n"
+        "2. Use strategy() not indicator()\n"
+        "3. Use strategy.entry() and strategy.exit() for trades\n"
+        "4. Make threshold inputs (RSI levels, MA periods, etc.) into input.* parameters so they "
+        "   are adjustable — do NOT hard-code magic numbers that can never fire (e.g. if the "
+        "   strategy requires RSI<30 TWICE in a row, expose 'oversoldLevel' as an input so a "
+        "   user can relax it to 40 if needed)\n"
+        "5. Add a 'lookbackBars' or 'maxSetupBars' input (default 500) that expires stale setups "
+        "   so they don't block new ones indefinitely\n"
+        "6. Output ONLY the Pine Script code — no markdown fences, no explanation text\n"
+    )
+
     if snippets:
         combined = "\n\n---\n\n".join(snippets[:5])
         prompt = (
@@ -255,32 +269,26 @@ def _synthesize(
             f"The video transcript contains these Pine Script snippets:\n\n"
             f"```pine\n{combined}\n```\n\n"
             f"Extract, merge, and complete these into ONE complete, compilable Pine Script v5 "
-            f"strategy (not indicator). Requirements:\n"
-            f"- Start with //@version=5 and strategy() call\n"
-            f"- Include all entry and exit logic from the snippets\n"
-            f"- Fill any gaps (missing stop-loss, position sizing, etc.) with sensible defaults "
-            f"documented in comments\n"
-            f"- Output ONLY the Pine Script code, no explanation\n"
+            f"strategy (not indicator).\n\n"
+            f"{_v5_rules}"
         )
     else:
         prompt = (
             f"Topic: {topic}\n"
             f"Strategy claim: {claim.statement}\n\n"
             f"Video transcript (excerpt):\n{text_excerpt}\n\n"
-            f"Write a complete, compilable Pine Script v5 STRATEGY (not indicator) that implements "
-            f"the trading strategy described above. Requirements:\n"
-            f"- Start with //@version=5 and strategy() call\n"
-            f"- Implement the entry and exit rules described in the video\n"
-            f"- Where the video is ambiguous or silent, add a comment: // TODO: [what was unclear]\n"
-            f"- Use sensible defaults for stop-loss, take-profit, and position sizing\n"
-            f"- Output ONLY the Pine Script code, no explanation\n"
+            f"Write a complete, compilable Pine Script v5 STRATEGY (not indicator) that "
+            f"implements the trading strategy described above.\n\n"
+            f"{_v5_rules}"
+            f"\nWhere the video is ambiguous or silent, add a comment: // TODO: [what was unclear]"
         )
 
     system = (
         "You are a Pine Script v5 expert. You write clean, compilable TradingView strategy "
-        "scripts from trading strategy descriptions. You never write indicator scripts — always "
-        "strategy scripts with strategy() and strategy.entry()/strategy.close() calls. You output "
-        "ONLY the Pine Script code block, nothing else."
+        "scripts from trading strategy descriptions. You ONLY write //@version=5 scripts — "
+        "NEVER version 6. You never write indicator scripts — always strategy scripts with "
+        "strategy() and strategy.entry()/strategy.close() calls. "
+        "You output ONLY raw Pine Script code, no markdown fences, no explanatory text."
     )
 
     try:
@@ -293,7 +301,11 @@ def _synthesize(
     if result.startswith("```"):
         result = re.sub(r"^```\w*\n?", "", result)
         result = re.sub(r"\n?```$", "", result)
-    return result.strip()
+    result = result.strip()
+
+    # Enforce v5 even if the LLM hallucinated v6 or another version.
+    result = re.sub(r"^//@version\s*=\s*\d+", "//@version=5", result, count=1, flags=re.MULTILINE)
+    return result
 
 
 # ---------------------------------------------------------------------------
