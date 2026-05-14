@@ -25,6 +25,20 @@ validation:
   mcp_retries: 1           # retry a failed MCP call once before giving up
   mcp_timeout_seconds: 60
 
+# Verdict thresholds — all tunable, none hardcoded.
+# Indicator / level claims: how often must the trigger lead to the claimed outcome?
+# Strategy backtest claims: what profit_factor / trade count is enough to conclude?
+# Change these to apply the same pipeline to a different domain or research standard.
+verdict:
+  indicator:
+    min_occurrences: 10       # fewer samples → "partial" regardless of rate
+    holds_rate: 0.65          # hit_rate >= this → "holds"
+    fails_rate: 0.45          # hit_rate < this → "fails"  (between holds/fails → "partial")
+  strategy:
+    min_trades: 20            # fewer trades → "partial" (insufficient sample)
+    holds_profit_factor: 1.5  # PF >= this AND net_profit > 0 → "holds"
+    fails_profit_factor: 1.0  # PF < this OR net_profit < 0 → "fails"
+
 # Tracing.
 tracing:
   enabled: true

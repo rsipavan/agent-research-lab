@@ -34,6 +34,8 @@ def _config(**overrides) -> Config:
         tracing_enabled=False, tracing_dir="traces",
         runs_enabled=False, runs_dir="runs",
         test_timeframes=["1D", "4H", "1H"],
+        indicator_min_occurrences=10, indicator_holds_rate=0.65, indicator_fails_rate=0.45,
+        strategy_min_trades=20, strategy_holds_profit_factor=1.5, strategy_fails_profit_factor=1.0,
     )
     base.update(overrides)
     return Config(**base)

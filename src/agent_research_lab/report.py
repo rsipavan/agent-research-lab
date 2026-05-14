@@ -29,10 +29,45 @@ from .types import (
     VideoSummary,
 )
 
-# verdict thresholds — see docs/validation_logic.md
-_MIN_N_TO_CONCLUDE = 10
-_HOLDS_RATE = 0.65
-_FAILS_RATE = 0.45
+# Fallback thresholds used when config is unavailable (tests, build_minimal).
+_DEFAULT_MIN_N = 10
+_DEFAULT_HOLDS_RATE = 0.65
+_DEFAULT_FAILS_RATE = 0.45
+_DEFAULT_MIN_TRADES = 20
+_DEFAULT_HOLDS_PF = 1.5
+_DEFAULT_FAILS_PF = 1.0
+
+from dataclasses import dataclass as _dataclass
+
+
+@_dataclass(frozen=True)
+class _Thresholds:
+    min_n: int
+    holds_rate: float
+    fails_rate: float
+    min_trades: int
+    holds_pf: float
+    fails_pf: float
+
+    @classmethod
+    def from_config(cls, config: Config | None) -> "_Thresholds":
+        if config is None:
+            return cls(_DEFAULT_MIN_N, _DEFAULT_HOLDS_RATE, _DEFAULT_FAILS_RATE,
+                       _DEFAULT_MIN_TRADES, _DEFAULT_HOLDS_PF, _DEFAULT_FAILS_PF)
+        return cls(
+            min_n=config.indicator_min_occurrences,
+            holds_rate=config.indicator_holds_rate,
+            fails_rate=config.indicator_fails_rate,
+            min_trades=config.strategy_min_trades,
+            holds_pf=config.strategy_holds_profit_factor,
+            fails_pf=config.strategy_fails_profit_factor,
+        )
+
+    @classmethod
+    def defaults(cls) -> "_Thresholds":
+        return cls(_DEFAULT_MIN_N, _DEFAULT_HOLDS_RATE, _DEFAULT_FAILS_RATE,
+                   _DEFAULT_MIN_TRADES, _DEFAULT_HOLDS_PF, _DEFAULT_FAILS_PF)
+
 
 _VERDICT_LABEL: dict[str, str] = {
     "holds": "CONFIRMED",
@@ -56,19 +91,20 @@ def build(
     run_id: str,
 ) -> Report:
     """Full report: leads with the video summary, then the per-claim findings."""
+    thresholds = _Thresholds.from_config(config)
     runs_by_claim: dict[str, list[ValidationRun]] = {}
     for r in runs:
         runs_by_claim.setdefault(r.claim_id, []).append(r)
     findings: list[ClaimFinding] = []
     for claim in thesis.claims:
         claim_runs = runs_by_claim.get(claim.id, [])
-        verdict, reason = _verdict_for(claim, claim_runs)
+        verdict, reason = _verdict_for(claim, claim_runs, thresholds)
         findings.append(ClaimFinding(claim=claim, validations=claim_runs,
                                      verdict=verdict, verdict_reason=reason))
 
     verdict_overall, overall_reason = _aggregate(findings)
     json_doc = _to_json(transcript, video_summary, findings, verdict_overall, overall_reason, run_id)
-    markdown = _to_markdown(transcript, video_summary, findings, verdict_overall, overall_reason)
+    markdown = _to_markdown(transcript, video_summary, findings, verdict_overall, overall_reason, thresholds)
     return _report(transcript, video_summary, findings, verdict_overall, overall_reason, markdown, json_doc)
 
 
@@ -125,12 +161,7 @@ def build_minimal(transcript: Transcript, video_summary: VideoSummary | None, ru
 # ---------------------------------------------------------------------------
 
 
-_MIN_TRADES_TO_CONCLUDE = 20   # strategy backtests need more samples than indicator checks
-_HOLDS_PF = 1.5                # profit_factor >= 1.5 AND net_profit > 0 → holds
-_FAILS_PF = 1.0                # profit_factor < 1.0 OR net_profit < 0 → fails
-
-
-def _verdict_for_one(claim, run: ValidationRun) -> tuple[Verdict, str]:
+def _verdict_for_one(claim, run: ValidationRun, t: _Thresholds) -> tuple[Verdict, str]:
     if run.status == "error":
         return ("untestable",
                 run.result.removeprefix("untestable — ") if run.result.startswith("untestable")
@@ -142,15 +173,15 @@ def _verdict_for_one(claim, run: ValidationRun) -> tuple[Verdict, str]:
     # Win rate alone is meaningless without knowing the R:R — a 40% WR on a 2R system is fine.
     if run.strategy_backtest is not None:
         sb = run.strategy_backtest
-        if sb.total_trades < _MIN_TRADES_TO_CONCLUDE:
+        if sb.total_trades < t.min_trades:
             return ("partial",
                     f"only {sb.total_trades} trades — too few to draw a reliable conclusion")
-        if sb.profit_factor >= _HOLDS_PF and sb.net_profit > 0:
+        if sb.profit_factor >= t.holds_pf and sb.net_profit > 0:
             return ("holds",
                     f"positive edge: profit factor {sb.profit_factor:.2f}, "
                     f"win rate {sb.win_rate:.0%}, net profit {sb.net_profit:+,.2f} "
                     f"over {sb.total_trades} trades")
-        if sb.profit_factor < _FAILS_PF or sb.net_profit < 0:
+        if sb.profit_factor < t.fails_pf or sb.net_profit < 0:
             return ("fails",
                     f"no edge: profit factor {sb.profit_factor:.2f}, "
                     f"net profit {sb.net_profit:+,.2f} over {sb.total_trades} trades")
@@ -163,16 +194,17 @@ def _verdict_for_one(claim, run: ValidationRun) -> tuple[Verdict, str]:
     r = run.hit_rate
     if r is None:
         return "untestable", "validation produced no rate"
-    if n < _MIN_N_TO_CONCLUDE:
+    if n < t.min_n:
         return "partial", f"only {n} occurrence(s) — rate {r:.0%}, sample too small to conclude"
-    if r >= _HOLDS_RATE:
+    if r >= t.holds_rate:
         return "holds", f"the claimed behavior occurred {r:.0%} of the time across {n} occurrences"
-    if r < _FAILS_RATE:
+    if r < t.fails_rate:
         return "fails", f"the claimed behavior occurred only {r:.0%} of the time across {n} occurrences"
     return "partial", f"the claimed behavior occurred {r:.0%} of the time across {n} occurrences — roughly coin-flip; the claim overstates it"
 
 
-def _verdict_for(claim, runs: list[ValidationRun]) -> tuple[Verdict, str]:
+def _verdict_for(claim, runs: list[ValidationRun], t: _Thresholds | None = None) -> tuple[Verdict, str]:
+    t = t or _Thresholds.defaults()
     """Aggregate per-timeframe verdicts into a single per-claim verdict."""
     if claim.testable == "no":
         return ("untestable",
@@ -180,7 +212,7 @@ def _verdict_for(claim, runs: list[ValidationRun]) -> tuple[Verdict, str]:
     if not runs:
         return "untestable", "claim was not validated"
 
-    per_tf = [(_verdict_for_one(claim, r), r) for r in runs]
+    per_tf = [(_verdict_for_one(claim, r, t), r) for r in runs]
     verdicts = [v for (v, _), _ in per_tf]
 
     if all(v == "untestable" for v in verdicts):
@@ -320,11 +352,13 @@ def _to_markdown(
     findings: list[ClaimFinding],
     verdict_overall: Verdict,
     overall_reason: str,
+    thresholds: _Thresholds | None = None,
 ) -> str:
+    t = thresholds or _Thresholds.defaults()
     return "".join([
         _header_md(transcript, video_summary, verdict_overall, overall_reason),
         _video_section_md(video_summary, findings),
-        _claims_section_md(findings),
+        _claims_section_md(findings, t),
         _overall_verdict_md(verdict_overall, overall_reason),
         _pipeline_md(),
         _footer_md(),
@@ -375,17 +409,19 @@ def _video_section_md(
     return "\n".join(lines) + "\n"
 
 
-def _claims_section_md(findings: list[ClaimFinding]) -> str:
+def _claims_section_md(findings: list[ClaimFinding], t: _Thresholds | None = None) -> str:
     if not findings:
         return "## Claims\n\nNo checkable market claims were found in this video.\n\n---\n\n"
+    t = t or _Thresholds.defaults()
     total = len(findings)
     parts = ["## Claims\n"]
     for i, f in enumerate(findings, 1):
-        parts.append(_claim_card_md(f, i, total))
+        parts.append(_claim_card_md(f, i, total, t))
     return "\n".join(parts)
 
 
-def _claim_card_md(finding: ClaimFinding, idx: int, total: int) -> str:
+def _claim_card_md(finding: ClaimFinding, idx: int, total: int, t: _Thresholds | None = None) -> str:
+    t = t or _Thresholds.defaults()
     claim = finding.claim
     lines: list[str] = []
 
@@ -477,11 +513,11 @@ def _claim_card_md(finding: ClaimFinding, idx: int, total: int) -> str:
         for v in valid_runs:
             if v.hit_rate is not None and v.occurrences is not None:
                 n, r = v.occurrences, v.hit_rate
-                if n < _MIN_N_TO_CONCLUDE:
+                if n < t.min_n:
                     conclusion = "sample too small"
-                elif r >= _HOLDS_RATE:
+                elif r >= t.holds_rate:
                     conclusion = "confirmed"
-                elif r < _FAILS_RATE:
+                elif r < t.fails_rate:
                     conclusion = "not supported"
                 else:
                     conclusion = "partial"

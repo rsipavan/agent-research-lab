@@ -143,9 +143,17 @@ async def _safe_edit(msg, text: str) -> None:
         pass
 
 
+_VERDICT_LABEL = {
+    "holds": "CONFIRMED",
+    "partial": "PARTIAL SUPPORT",
+    "fails": "NOT SUPPORTED",
+    "untestable": "UNTESTABLE",
+}
+
+
 async def _send_claim_charts(msg, report, config: Config) -> None:
     """For each validated claim: set TV to the right symbol/timeframe, screenshot, send as photo.
-    Strategy backtest claims also get a strategy-tester screenshot.
+    Strategy backtest claims also get a trade-overlay chart and strategy-tester screenshot.
     """
     claims_to_chart = [
         f for f in report.findings
@@ -154,13 +162,6 @@ async def _send_claim_charts(msg, report, config: Config) -> None:
     if not claims_to_chart:
         return
 
-    _VERDICT_LABEL = {
-        "holds": "CONFIRMED",
-        "partial": "PARTIAL SUPPORT",
-        "fails": "NOT SUPPORTED",
-        "untestable": "UNTESTABLE",
-    }
-
     try:
         with McpClient(config) as mcp:
             for finding in claims_to_chart:
@@ -168,11 +169,10 @@ async def _send_claim_charts(msg, report, config: Config) -> None:
                 sym = claim.instrument
                 tf = claim.timeframe or "D"
 
-                # Navigate chart to the right symbol and timeframe
                 mcp.call("chart_set_symbol", {"symbol": sym})
                 mcp.call("chart_set_timeframe", {"timeframe": tf})
 
-                # Capture chart region
+                # Plain chart screenshot
                 result = mcp.call("capture_screenshot", {
                     "region": "chart",
                     "filename": f"tg_chart_{claim.id}",
@@ -187,18 +187,132 @@ async def _send_claim_charts(msg, report, config: Config) -> None:
                     )
                     await _send_photo(msg, chart_path, caption)
 
-                # For strategy backtests: also send the strategy tester panel
+                # For strategy backtests: trade overlay + strategy tester screenshot
                 if claim.test_type == "strategy_backtest":
-                    result2 = mcp.call("capture_screenshot", {
-                        "region": "strategy_tester",
-                        "filename": f"tg_strat_{claim.id}",
-                    })
-                    strat_path = result2.get("file_path") if result2.get("success") else None
-                    if strat_path and Path(strat_path).exists():
-                        await _send_photo(msg, strat_path, "Strategy Tester results")
+                    await _send_trade_overlay(msg, mcp, claim, finding)
 
     except Exception:  # noqa: BLE001
         log.warning("chart screenshot step failed — skipping", exc_info=True)
+
+
+async def _send_trade_overlay(msg, mcp, claim, finding) -> None:
+    """Draw trade entry/exit markers on the chart, capture annotated screenshot, send trade table."""
+    try:
+        trades_result = mcp.call("data_get_trades", {})
+        trades = trades_result.get("trades") if isinstance(trades_result, dict) else None
+        if not trades:
+            # Strategy tester screenshot is still useful even without individual trades
+            result = mcp.call("capture_screenshot", {
+                "region": "strategy_tester",
+                "filename": f"tg_strat_{claim.id}",
+            })
+            strat_path = result.get("file_path") if result.get("success") else None
+            if strat_path and Path(strat_path).exists():
+                await _send_photo(msg, strat_path, "Strategy Tester results")
+            return
+
+        # Draw entry/exit markers for each trade (up to 20 most recent to avoid clutter)
+        recent = trades[-20:] if len(trades) > 20 else trades
+        for i, trade in enumerate(recent):
+            entry_price = trade.get("entry_price") or trade.get("entryPrice")
+            exit_price = trade.get("exit_price") or trade.get("exitPrice")
+            direction = (trade.get("type") or trade.get("direction") or "").upper()
+            is_long = "LONG" in direction or direction == "BUY"
+            color = "#26a69a" if is_long else "#ef5350"  # TV teal/red
+
+            if entry_price:
+                mcp.call("draw_shape", {
+                    "shape": "horizontal_line",
+                    "price": float(entry_price),
+                    "color": color,
+                    "text": f"E{i+1}",
+                })
+            if exit_price:
+                pnl = trade.get("profit") or trade.get("pnl") or 0
+                exit_color = "#26a69a" if float(pnl) >= 0 else "#ef5350"
+                mcp.call("draw_shape", {
+                    "shape": "horizontal_line",
+                    "price": float(exit_price),
+                    "color": exit_color,
+                    "text": f"X{i+1}",
+                })
+
+        # Capture annotated chart
+        ann_result = mcp.call("capture_screenshot", {
+            "region": "chart",
+            "filename": f"tg_trades_{claim.id}",
+        })
+        ann_path = ann_result.get("file_path") if ann_result.get("success") else None
+        if ann_path and Path(ann_path).exists():
+            sb = next((v.strategy_backtest for v in finding.validations if v.strategy_backtest), None)
+            caption = _trade_overlay_caption(claim, sb, len(trades))
+            await _send_photo(msg, ann_path, caption)
+
+        # Clear drawings after capture
+        mcp.call("draw_clear", {})
+
+        # Send detailed trade table as text
+        table = _trade_table_text(trades, claim)
+        if table:
+            try:
+                await msg.reply_text(table, disable_web_page_preview=True)
+            except Exception:  # noqa: BLE001
+                pass
+
+        # Also send strategy tester panel
+        st_result = mcp.call("capture_screenshot", {
+            "region": "strategy_tester",
+            "filename": f"tg_strat_{claim.id}",
+        })
+        strat_path = st_result.get("file_path") if st_result.get("success") else None
+        if strat_path and Path(strat_path).exists():
+            await _send_photo(msg, strat_path, "Strategy Tester — full metrics")
+
+    except Exception:  # noqa: BLE001
+        log.warning("trade overlay step failed", exc_info=True)
+
+
+def _trade_overlay_caption(claim, sb, n_trades: int) -> str:
+    sym = claim.instrument or "?"
+    tf = claim.timeframe or "?"
+    lines = [f"Trade Paths | {sym} | {tf}", f"{n_trades} trades annotated"]
+    if sb:
+        pnl_str = f"{sb.net_profit:+,.2f}" if sb.net_profit is not None else "n/a"
+        lines.append(f"Net P&L: {pnl_str}  |  Win rate: {sb.win_rate:.0%}  |  PF: {sb.profit_factor:.2f}")
+    return "\n".join(lines)
+
+
+def _trade_table_text(trades: list, claim) -> str:
+    """Format trades as a compact text table for Telegram."""
+    if not trades:
+        return ""
+    sym = claim.instrument or "?"
+    tf = claim.timeframe or "?"
+    lines = [f"Trade Log | {sym} | {tf}", ""]
+    lines.append(f"{'#':<3} {'Dir':<5} {'Entry':>10} {'Exit':>10} {'P&L':>10}")
+    lines.append("-" * 42)
+    wins = losses = 0
+    total_pnl = 0.0
+    for i, t in enumerate(trades[:30], 1):
+        direction = (t.get("type") or t.get("direction") or "?").upper()
+        side = "LONG" if "LONG" in direction or direction == "BUY" else "SHORT"
+        entry = t.get("entry_price") or t.get("entryPrice") or 0
+        exit_p = t.get("exit_price") or t.get("exitPrice") or 0
+        pnl = float(t.get("profit") or t.get("pnl") or 0)
+        total_pnl += pnl
+        if pnl >= 0:
+            wins += 1
+            pnl_str = f"+{pnl:,.1f}"
+        else:
+            losses += 1
+            pnl_str = f"{pnl:,.1f}"
+        lines.append(f"{i:<3} {side:<5} {float(entry):>10,.1f} {float(exit_p):>10,.1f} {pnl_str:>10}")
+    if len(trades) > 30:
+        lines.append(f"... (+{len(trades)-30} more trades)")
+    lines.append("-" * 42)
+    pnl_total_str = f"+{total_pnl:,.1f}" if total_pnl >= 0 else f"{total_pnl:,.1f}"
+    lines.append(f"{'TOT':<3} {'':5} {'':>10} {pnl_total_str:>10} ({wins}W/{losses}L)")
+    return "\n".join(lines)
 
 
 async def _send_photo(msg, file_path: str, caption: str) -> None:

@@ -42,6 +42,14 @@ class Config:
     runs_enabled: bool
     runs_dir: str
 
+    # verdict thresholds (tunable in config.yml)
+    indicator_min_occurrences: int
+    indicator_holds_rate: float
+    indicator_fails_rate: float
+    strategy_min_trades: int
+    strategy_holds_profit_factor: float
+    strategy_fails_profit_factor: float
+
     def test_type_enabled(self, test_type: str) -> bool:
         return bool(self.test_types.get(test_type, False))
 
@@ -58,6 +66,9 @@ def load_config(config_path: Path | None = None) -> Config:
     validation = raw.get("validation", {})
     tracing = raw.get("tracing", {})
     outputs = raw.get("outputs", {})
+    verdict = raw.get("verdict", {})
+    verdict_ind = verdict.get("indicator", {})
+    verdict_strat = verdict.get("strategy", {})
 
     return Config(
         telegram_bot_token=os.getenv("TELEGRAM_BOT_TOKEN", ""),
@@ -83,6 +94,12 @@ def load_config(config_path: Path | None = None) -> Config:
         tracing_dir=tracing.get("dir", "traces"),
         runs_enabled=bool(outputs.get("save_runs", True)),
         runs_dir=outputs.get("runs_dir", "runs"),
+        indicator_min_occurrences=int(verdict_ind.get("min_occurrences", 10)),
+        indicator_holds_rate=float(verdict_ind.get("holds_rate", 0.65)),
+        indicator_fails_rate=float(verdict_ind.get("fails_rate", 0.45)),
+        strategy_min_trades=int(verdict_strat.get("min_trades", 20)),
+        strategy_holds_profit_factor=float(verdict_strat.get("holds_profit_factor", 1.5)),
+        strategy_fails_profit_factor=float(verdict_strat.get("fails_profit_factor", 1.0)),
     )
 
 
