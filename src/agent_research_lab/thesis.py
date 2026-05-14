@@ -18,6 +18,7 @@ from __future__ import annotations
 import json
 import time
 
+from . import knowledge as knowledge_mod
 from . import llm
 from .config import Config
 from .types import Claim, ThesisSet, Transcript, VideoSummary
@@ -75,7 +76,7 @@ Transcript:
 {transcript}
 \"\"\"
 
-Extract the checkable claims as specified. JSON only."""
+{prior_patterns}Extract the checkable claims as specified. JSON only."""
 
 
 def extract(transcript: Transcript, summary: VideoSummary | None, config: Config) -> ThesisSet:
@@ -98,16 +99,25 @@ def extract(transcript: Transcript, summary: VideoSummary | None, config: Config
 
 
 def _call_llm(transcript: Transcript, summary: VideoSummary | None, config: Config) -> str:
+    # Infer the most likely claim type(s) this video will produce, to pull relevant
+    # prior failure traces from the knowledge base before asking the LLM to extract.
+    ct = summary.content_type if summary else "unknown"
+    likely_type = "strategy_backtest" if ct in ("strategy_or_claim",) else "indicator_value_over_range"
+    prior = knowledge_mod.format_prior_patterns_for_prompt(likely_type)
+    if prior:
+        prior = prior + "\n\n"
+
     user = _USER_TEMPLATE.format(
         title=transcript.title or "(unknown title)",
         channel=transcript.channel or "(unknown channel)",
         url=transcript.url,
-        content_type=summary.content_type if summary else "unknown",
+        content_type=ct,
         topic=summary.topic if summary else "(not summarized)",
         summary=summary.summary if summary else "",
         # cap the transcript we send — long videos get truncated; the first ~12k words
         # carry the thesis in practice
         transcript=" ".join(transcript.text.split()[:12000]),
+        prior_patterns=prior,
     )
 
     last_err: Exception | None = None

@@ -182,9 +182,22 @@ def _verdict_for_one(claim, run: ValidationRun, t: _Thresholds) -> tuple[Verdict
                     f"win rate {sb.win_rate:.0%}, net profit {sb.net_profit:+,.2f} "
                     f"over {sb.total_trades} trades")
         if sb.profit_factor < t.fails_pf or sb.net_profit < 0:
+            # Check if the inverse of this strategy clears the holds threshold.
+            # A consistent loser is also informative: the operationalization has
+            # real predictive power, just in the wrong direction.
+            inverse_note = ""
+            if sb.profit_factor > 0:
+                inverse_pf = 1.0 / sb.profit_factor
+                if inverse_pf >= t.holds_pf:
+                    inverse_note = (
+                        f" | inverse signal detected: reversing all entries and exits "
+                        f"gives estimated PF {inverse_pf:.2f} — above the {t.holds_pf} holds threshold; "
+                        f"the strategy has consistent predictive power but in the wrong direction"
+                    )
             return ("fails",
                     f"no edge: profit factor {sb.profit_factor:.2f}, "
-                    f"net profit {sb.net_profit:+,.2f} over {sb.total_trades} trades")
+                    f"net profit {sb.net_profit:+,.2f} over {sb.total_trades} trades"
+                    + inverse_note)
         return ("partial",
                 f"marginal edge: profit factor {sb.profit_factor:.2f}, "
                 f"win rate {sb.win_rate:.0%}, net profit {sb.net_profit:+,.2f} "
@@ -533,6 +546,19 @@ def _claim_card_md(finding: ClaimFinding, idx: int, total: int, t: _Thresholds |
         finding.verdict_reason,
         "",
     ]
+
+    # Inverse edge block — rendered when a strategy lost consistently enough
+    # that reversing every entry and exit would have cleared the holds threshold.
+    if finding.verdict == "fails" and "inverse signal detected" in finding.verdict_reason:
+        lines += [
+            "> **Inverse Signal Detected**",
+            "> This strategy lost consistently. Reversing every entry and exit — selling",
+            "> where it buys, buying where it sells — had an estimated profit factor above",
+            "> the holds threshold over the same period. This is an operationalization",
+            "> finding: the strategy's rules have real predictive power, but in the direction",
+            "> opposite to what was claimed.",
+            "",
+        ]
 
     # Caveats
     seen: set[str] = set()

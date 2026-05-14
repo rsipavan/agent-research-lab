@@ -14,7 +14,9 @@ It is a **validation and orchestration system** that happens to operate on tradi
 
 For strategy claims: the agent synthesizes a complete Pine Script v6 strategy from the transcript, compiles it via the TradingView MCP with a self-repair loop, runs the TradingView strategy tester, and returns real backtest metrics. The `.pine` file is sent as a Telegram document attachment.
 
-The interesting part is not the trading domain. It is the orchestration, the decision logic for *what is even testable*, the failure-aware workflow, and the observability trail.
+**The system accumulates implementation knowledge about how trading concepts are operationalized, validated, and translated into executable tests.** Each run appends findings to `knowledge/store.jsonl` — categorized by failure mode (no instrument, ambiguous exits, framework-only, compile error), not by outcome. When the next run encounters a similar claim, the extractor already knows: *previous ORB implementations failed because exits were undefined; prior RSI-divergence claims on gold had no named instrument.* This is not self-improving trading. It is self-improving reliability and operationalization.
+
+The interesting part is not the trading domain. It is the orchestration, the decision logic for *what is even testable*, the pattern-aware validation memory, and the observability trail.
 
 ---
 
@@ -52,7 +54,8 @@ flowchart LR
    - *Strategy claims* — `pine.py` synthesizes a complete Pine Script v6 strategy from the transcript (extracting on-screen code if present, or writing from the verbal description if not), compiles it via the TradingView MCP with an LLM self-repair loop (up to 3 fix attempts), runs the TradingView strategy tester, and returns real backtest metrics: trades, win rate, net profit, max drawdown, profit factor.
 5. **Report** — `report.py` builds the report. It **leads with "what this video is"**, then (if there were claims) a structured per-claim result built around five questions: what did the video claim, what was testable, what data was checked, what happened, why the system concluded what it did. Strategy backtest claims get the full metrics table. Verdicts are *computed* from the validation data, not LLM-judged.
 6. **Reply** — `telegram_bot.py` sends live progress updates (each step edits one status message), then sends chart screenshots for each validated claim, then the full report text, then any `.pine` files as document attachments.
-7. **Trace** — every run writes `traces/<run-id>.jsonl`, one line per step. For the examples in this repo, those traces are committed so you can read the agent's reasoning trail.
+7. **Accumulate** — every run appends to `knowledge/store.jsonl`: what was claimed, how it was operationalized, which failure modes occurred, what the data showed. This file is committed and grows across runs. The next thesis extraction gets prior failure traces as context — "previous strategy claims without explicit exit rules failed to compile; RSI claims without a named instrument are always untestable" — improving claim formalization, parameter inference, ambiguity detection, and validation routing on every subsequent run.
+8. **Trace** — every run writes `traces/<run-id>.jsonl`, one line per step. For the examples in this repo, those traces are committed so you can read the agent's reasoning trail.
 
 ## Architecture
 
@@ -67,6 +70,7 @@ src/agent_research_lab/
 ├── report.py          # summary + validation runs → report (leads with "what this video is"; verdicts computed, not LLM-judged)
 ├── orchestrate.py     # the sequential pipeline; logs each step to traces/; step callbacks for live progress
 ├── watchlist.py       # predefined symbol lists (default, nifty50, sp500, crypto, forex, commodities)
+├── knowledge.py       # pattern-aware validation memory: operationalization failure traces, inverse-edge detection
 ├── llm.py             # backend-agnostic LLM: claude CLI (default) | Anthropic API | Gemini API
 ├── mcp_client.py      # thin TradingView MCP client (retries, error → untestable, never crashes a run)
 ├── config.py          # loads config.yml + .env

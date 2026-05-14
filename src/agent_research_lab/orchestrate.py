@@ -16,6 +16,7 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
+from . import knowledge as knowledge_mod
 from . import pine as pine_mod
 from . import report as report_mod
 from . import summarize as summarize_mod
@@ -207,6 +208,10 @@ def process(
     _cb("report.build", f"Report ready — verdict: {report.verdict_overall}")
     _write_trace(config, run_id, trace)
     _write_run_artifacts(config, run_id, url, transcript, summary, thesis, runs, report)
+
+    # --- step 6: append findings to the pattern-aware validation memory ---
+    _append_to_knowledge(report, transcript.video_id or run_id)
+
     return report
 
 
@@ -315,6 +320,30 @@ def _write_run_artifacts(
 
 def _ms(t0: float) -> int:
     return int((time.perf_counter() - t0) * 1000)
+
+
+def _append_to_knowledge(report, video_id: str) -> None:
+    """Append each claim finding to the pattern-aware validation memory."""
+    try:
+        for finding in report.findings:
+            # Detect inverse edge PF from the verdict reason text, so the knowledge
+            # entry is consistent with what the report already computed.
+            inverse_edge_pf: float | None = None
+            if "inverse signal detected" in finding.verdict_reason:
+                import re as _re
+                m = _re.search(r"estimated PF ([\d.]+)", finding.verdict_reason)
+                if m:
+                    try:
+                        inverse_edge_pf = float(m.group(1))
+                    except ValueError:
+                        pass
+            entry = knowledge_mod.entry_from_finding(
+                finding, video_id, inverse_edge_pf=inverse_edge_pf
+            )
+            knowledge_mod.append(entry)
+    except Exception:  # noqa: BLE001
+        # Knowledge base write failure must never affect the report or abort the run.
+        pass
 
 
 # ---------------------------------------------------------------------------
