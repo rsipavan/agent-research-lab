@@ -120,18 +120,19 @@ def process(url: str, config: Config | None = None) -> Report:
         _write_run_artifacts(config, run_id, url, transcript, summary, thesis, runs, report)
         return report
 
-    # --- step 4: validate each testable claim ---
+    # --- step 4: validate each testable claim across configured timeframes ---
     runs = []
     with McpClient(config) as mcp:
         for claim in thesis.testable_claims:
             t0 = time.perf_counter()
-            vr = validate_mod.run(claim, config, mcp)
-            runs.append(vr)
-            ok = vr.status == "ok"
+            claim_runs = validate_mod.run(claim, config, mcp)
+            runs.extend(claim_runs)
+            n_ok = sum(1 for r in claim_runs if r.status == "ok")
             trace.append(TraceEvent(
-                "validate.run", ok,
-                f"[{claim.id}] {vr.result}" + ("" if ok else f" (status={vr.status})"),
-                _ms(t0), extra={"claim_id": claim.id},
+                "validate.run", n_ok > 0,
+                f"[{claim.id}] {n_ok}/{len(claim_runs)} timeframe(s) ok",
+                _ms(t0),
+                extra={"claim_id": claim.id, "n_timeframes": len(claim_runs)},
             ))
 
     # --- step 5: report ---

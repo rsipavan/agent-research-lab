@@ -30,6 +30,7 @@ class Config:
     # config.yml
     test_types: dict[str, bool]
     default_timeframe: str
+    test_timeframes: list[str]  # claim is validated on each — multi-tf evidence beats single-tf cherry-pick
     default_lookback_days: int
     symbol_fallback: str | None
     max_claims_per_video: int
@@ -71,6 +72,7 @@ def load_config(config_path: Path | None = None) -> Config:
             "strategy_backtest": False,
         }),
         default_timeframe=defaults.get("timeframe", "1D"),
+        test_timeframes=list(defaults.get("test_timeframes", ["1D", "4H", "1H"])),
         default_lookback_days=int(defaults.get("lookback_days", 365)),
         symbol_fallback=defaults.get("symbol_fallback") or None,
         max_claims_per_video=int(extraction.get("max_claims_per_video", 3)),

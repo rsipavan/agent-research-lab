@@ -46,12 +46,16 @@ def build(
     run_id: str,
 ) -> Report:
     """Full report: leads with the video summary, then the per-claim findings."""
-    runs_by_claim = {r.claim_id: r for r in runs}
+    # group runs by claim — each claim can have multiple ValidationRuns (one per timeframe)
+    runs_by_claim: dict[str, list[ValidationRun]] = {}
+    for r in runs:
+        runs_by_claim.setdefault(r.claim_id, []).append(r)
     findings: list[ClaimFinding] = []
     for claim in thesis.claims:
-        run = runs_by_claim.get(claim.id)
-        verdict, reason = _verdict_for(claim, run)
-        findings.append(ClaimFinding(claim=claim, validation=run, verdict=verdict, verdict_reason=reason))
+        claim_runs = runs_by_claim.get(claim.id, [])
+        verdict, reason = _verdict_for(claim, claim_runs)
+        findings.append(ClaimFinding(claim=claim, validations=claim_runs,
+                                     verdict=verdict, verdict_reason=reason))
 
     verdict_overall, overall_reason = _aggregate(findings)
     json_doc = _to_json(transcript, video_summary, findings, verdict_overall, overall_reason, run_id)
@@ -109,11 +113,8 @@ def build_minimal(transcript: Transcript, video_summary: VideoSummary | None, ru
 # ---------------------------------------------------------------------------
 
 
-def _verdict_for(claim, run: ValidationRun | None) -> tuple[Verdict, str]:
-    if claim.testable == "no":
-        return "untestable", claim.reason_if_not or "the video makes this point but it isn't a checkable claim"
-    if run is None:
-        return "untestable", "claim was not validated"
+def _verdict_for_one(claim, run: ValidationRun) -> tuple[Verdict, str]:
+    """Verdict for ONE (claim, timeframe). The per-claim verdict aggregates across these."""
     if run.status == "error":
         return ("untestable",
                 run.result.removeprefix("untestable — ") if run.result.startswith("untestable")
@@ -131,6 +132,55 @@ def _verdict_for(claim, run: ValidationRun | None) -> tuple[Verdict, str]:
     if r < _FAILS_RATE:
         return "fails", f"the claimed behavior occurred only {r:.0%} of the time over {n} occurrences"
     return "partial", f"the claimed behavior occurred {r:.0%} of the time over {n} occurrences — roughly coin-flip; the claim overstates it"
+
+
+def _verdict_for(claim, runs: list[ValidationRun]) -> tuple[Verdict, str]:
+    """Aggregate per-timeframe verdicts into a single per-claim verdict.
+
+    The aggregation rule: if EVERY tested timeframe lands in the same bucket
+    (holds / fails / partial), the claim gets that verdict. If timeframes disagree —
+    e.g. holds on 1D but fails on 1H — the verdict is "partial" with a reason that
+    surfaces the disagreement. Disagreement is itself a finding worth reporting.
+    """
+    if claim.testable == "no":
+        return ("untestable",
+                claim.reason_if_not or "the video makes this point but it isn't a checkable claim")
+    if not runs:
+        return "untestable", "claim was not validated"
+
+    # per-timeframe verdicts
+    per_tf = [(_verdict_for_one(claim, r), r) for r in runs]
+    verdicts = [v for (v, _), _ in per_tf]
+
+    # all timeframes untestable
+    if all(v == "untestable" for v in verdicts):
+        reasons = {reason for (_, reason), _ in per_tf}
+        if len(reasons) == 1:
+            return "untestable", reasons.pop()
+        return "untestable", "the test couldn't run cleanly on any timeframe: " + "; ".join(
+            f"{r.timeframe}: {reason}" for (_, reason), r in per_tf
+        )
+
+    valid = [((v, reason), r) for (v, reason), r in per_tf if v != "untestable"]
+
+    def _tf_brief(r: ValidationRun) -> str:
+        if r.hit_rate is not None and r.occurrences is not None:
+            return f"{r.timeframe}: {r.hit_rate:.0%} of {r.occurrences}"
+        return f"{r.timeframe}: {r.result}"
+
+    if all(v == "holds" for (v, _), _ in valid):
+        return "holds", "held across " + ", ".join(_tf_brief(r) for _, r in valid)
+    if all(v == "fails" for (v, _), _ in valid):
+        return "fails", "failed across " + ", ".join(_tf_brief(r) for _, r in valid)
+    if all(v == "partial" for (v, _), _ in valid):
+        return "partial", "partial across " + ", ".join(_tf_brief(r) for _, r in valid)
+    # timeframes disagree — surface that explicitly
+    return "partial", "timeframes disagree — " + ", ".join(
+        f"{r.timeframe}: {v} ({r.hit_rate:.0%} of {r.occurrences})"
+        if r.hit_rate is not None and r.occurrences is not None
+        else f"{r.timeframe}: {v}"
+        for (v, _), r in valid
+    )
 
 
 def _aggregate(findings: list[ClaimFinding]) -> tuple[Verdict, str]:
@@ -192,16 +242,20 @@ def _to_json(transcript, video_summary, findings, verdict_overall, overall_reaso
                 "test_type": f.claim.test_type,
                 "verdict": f.verdict,
                 "verdict_reason": f.verdict_reason,
-                "validation": None if f.validation is None else {
-                    "status": f.validation.status,
-                    "tradingview_query": f.validation.tradingview_query,
-                    "data_summary": f.validation.data_summary,
-                    "occurrences": f.validation.occurrences,
-                    "hit_rate": f.validation.hit_rate,
-                    "result": f.validation.result,
-                    "caveats": f.validation.caveats,
-                    "error": f.validation.error,
-                },
+                "validations": [
+                    {
+                        "timeframe": v.timeframe,
+                        "status": v.status,
+                        "tradingview_query": v.tradingview_query,
+                        "data_summary": v.data_summary,
+                        "occurrences": v.occurrences,
+                        "hit_rate": v.hit_rate,
+                        "result": v.result,
+                        "caveats": v.caveats,
+                        "error": v.error,
+                    }
+                    for v in f.validations
+                ],
             }
             for f in findings
         ],
@@ -265,16 +319,34 @@ def _claims_section_md(findings: list[ClaimFinding]) -> str:
         lines.append(f"- **Verdict:** {f.verdict} — {f.verdict_reason}")
         if f.claim.instrument or f.claim.timeframe:
             lines.append(f"- **Scope:** {f.claim.instrument or '?'} · {f.claim.timeframe or 'timeframe unspecified'}")
-        if f.validation is not None:
-            v = f.validation
-            if v.tradingview_query:
-                lines.append(f"- **Tested:** {v.tradingview_query}")
-            if v.data_summary:
-                lines.append(f"- **Data:** {v.data_summary}")
-            if v.caveats:
-                lines.append("- **Caveats:**")
+        # Multi-timeframe results table
+        valid_runs = [v for v in f.validations if v.timeframe != "n/a"]
+        if valid_runs:
+            lines += ["", "**Per-timeframe results:**", "", "| Timeframe | Status | Occurrences | Hit rate | Result |", "|---|---|---|---|---|"]
+            for v in valid_runs:
+                occ = "—" if v.occurrences is None else str(v.occurrences)
+                rate = "—" if v.hit_rate is None else f"{v.hit_rate:.0%}"
+                lines.append(
+                    f"| {v.timeframe} | {v.status} | {occ} | {rate} | {_md_escape(v.result)} |"
+                )
+            # consolidated caveats from all timeframes (deduped)
+            all_caveats: list[str] = []
+            seen: set[str] = set()
+            for v in valid_runs:
                 for c in v.caveats:
+                    if c not in seen:
+                        seen.add(c)
+                        all_caveats.append(c)
+            if all_caveats:
+                lines.append("")
+                lines.append("**Caveats:**")
+                for c in all_caveats:
                     lines.append(f"  - {c}")
+        elif f.validations:
+            # all "n/a" timeframe — fundamental untestable (gate failure)
+            v = f.validations[0]
+            if v.result:
+                lines.append(f"- **Why:** {v.result.removeprefix('untestable — ')}")
         elif f.claim.reason_if_not:
             lines.append(f"- **Why not testable:** {f.claim.reason_if_not}")
         lines.append("")

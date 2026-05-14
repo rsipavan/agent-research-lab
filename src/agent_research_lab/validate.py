@@ -1,4 +1,9 @@
-"""Validation: a Claim -> a ValidationRun, against real market data via the TradingView MCP.
+"""Validation: a Claim -> list[ValidationRun], against real market data via the TradingView MCP.
+
+One ValidationRun = one (claim, timeframe) test. A single claim is typically validated
+across several timeframes (config.test_timeframes) and produces several ValidationRuns;
+the per-claim verdict aggregates over them in report.py. Multi-timeframe evidence beats
+single-timeframe cherry-pick — and when timeframes disagree, that's itself a finding.
 
 This module is the only one that touches market data, and it does so through the
 TradingView MCP — never a data vendor directly. It REPORTS THE RATE (e.g. "bounced
@@ -22,70 +27,89 @@ from .types import Claim, ValidationRun
 _LEVEL_TOLERANCE = 0.003  # 0.3%
 # How far forward we look for the "claimed outcome" after a trigger, in bars.
 _FORWARD_WINDOW_BARS = 3
+# Maximum indicators allowed on a TradingView Free chart.
+_TV_FREE_INDICATOR_CAP = 2
 
 
-def run(claim: Claim, config: Config, mcp: McpClient) -> ValidationRun:
-    """Run the appropriate test for `claim`. Always returns a ValidationRun."""
-    # --- gate: testable == "no" should never reach here, but be safe ---
+def run(claim: Claim, config: Config, mcp: McpClient) -> list[ValidationRun]:
+    """Run the appropriate test for `claim` on each timeframe in scope. Always returns
+    a non-empty list. Each element is one (claim, timeframe) result.
+
+    Timeframe selection: if `claim.timeframe` is set, ONLY that timeframe is used (the
+    video named one — respect it). Otherwise the claim is tested on every entry in
+    `config.test_timeframes`. Multi-timeframe evidence beats single-tf cherry-pick.
+
+    If a claim is fundamentally untestable (no instrument, disabled test type,
+    strategy_backtest in v1, etc.), returns a single untestable run with timeframe="n/a"
+    — the gate applies regardless of timeframe and there's no point running it three times.
+    """
+    # --- gates that mean "untestable on every timeframe" ---
     if claim.testable == "no":
-        return _untestable(claim, "claim was classified as not testable")
-
-    # --- gate: strategy_backtest is not in v1 ---
+        return [_untestable(claim, "n/a", "claim was classified as not testable")]
     if claim.test_type == "strategy_backtest":
-        return _untestable(claim, "this is a full strategy — needs a backtest engine (not in v1)")
-
-    # --- gate: no test type maps ---
+        return [_untestable(claim, "n/a",
+                            "this is a full strategy — needs a backtest engine (not in v1)")]
     if claim.test_type == "none":
-        return _untestable(claim, "no test type maps to this claim")
-
-    # --- gate: test type disabled in config ---
+        return [_untestable(claim, "n/a", "no test type maps to this claim")]
     if not config.test_type_enabled(claim.test_type):
-        return _untestable(claim, f"test type '{claim.test_type}' is disabled in config")
+        return [_untestable(claim, "n/a",
+                            f"test type '{claim.test_type}' is disabled in config")]
 
-    # --- gate: need an instrument ---
     instrument = claim.instrument or config.symbol_fallback
     if not instrument:
-        return _untestable(claim, "no instrument named in the video and no fallback configured")
+        return [_untestable(claim, "n/a",
+                            "no instrument named in the video and no fallback configured")]
 
-    timeframe = claim.timeframe or config.default_timeframe
-    timeframe_assumed = claim.timeframe is None
-
-    # --- resolve the symbol ---
+    # --- symbol resolution happens ONCE; reused across timeframes ---
     symbol = _resolve_symbol(instrument, mcp, config)
     if symbol is None:
-        return _untestable(claim, f'could not resolve "{instrument}" to a tradeable symbol')
+        return [_untestable(claim, "n/a",
+                            f'could not resolve "{instrument}" to a tradeable symbol')]
 
-    # --- dispatch ---
-    try:
-        if claim.test_type == "indicator_value_over_range":
-            vr = _test_indicator_value_over_range(claim, symbol, timeframe, mcp, config)
-        elif claim.test_type == "level_zone_hit_rate":
-            vr = _test_level_zone_hit_rate(claim, symbol, timeframe, mcp, config)
-        else:  # pragma: no cover - covered by gates above
-            return _untestable(claim, f"unhandled test type '{claim.test_type}'")
-    except McpError as e:
-        return ValidationRun(
-            claim_id=claim.id,
-            test_type=claim.test_type,
-            status="error",
-            tradingview_query=f"{symbol} {timeframe}",
-            data_summary="",
-            occurrences=None,
-            hit_rate=None,
-            result=f"validation failed: {e}",
-            caveats=[],
-            error=str(e),
-        )
+    # --- decide which timeframes to test ---
+    if claim.timeframe:
+        timeframes = [claim.timeframe]
+        timeframes_assumed = False
+    else:
+        timeframes = list(config.test_timeframes) if config.test_timeframes else [config.default_timeframe]
+        timeframes_assumed = True
 
-    # Standard caveats every run carries.
-    vr.caveats.extend([
-        f"tested on one instrument ({symbol}) over one period — not a cross-market or cross-regime check",
-        f"tested over the last {config.default_lookback_days} days; a different window may give a different rate",
-        "no transaction costs / slippage modeled (v1 doesn't simulate execution)",
-    ])
-    if timeframe_assumed:
-        vr.caveats.append(f"the video didn't specify a timeframe; assumed {timeframe}")
-    return vr
+    # --- per-timeframe loop ---
+    runs: list[ValidationRun] = []
+    for tf in timeframes:
+        try:
+            if claim.test_type == "indicator_value_over_range":
+                vr = _test_indicator_value_over_range(claim, symbol, tf, mcp, config)
+            elif claim.test_type == "level_zone_hit_rate":
+                vr = _test_level_zone_hit_rate(claim, symbol, tf, mcp, config)
+            else:  # pragma: no cover - covered by gates above
+                vr = _untestable(claim, tf, f"unhandled test type '{claim.test_type}'")
+        except McpError as e:
+            vr = ValidationRun(
+                claim_id=claim.id,
+                test_type=claim.test_type,
+                timeframe=tf,
+                status="error",
+                tradingview_query=f"{symbol} {tf}",
+                data_summary="",
+                occurrences=None,
+                hit_rate=None,
+                result=f"validation failed: {e}",
+                caveats=[],
+                error=str(e),
+            )
+
+        # Standard caveats every run carries.
+        vr.caveats.extend([
+            f"tested on {symbol} at {tf} over the last {config.default_lookback_days} days",
+            "no transaction costs / slippage modeled (v1 doesn't simulate execution)",
+        ])
+        if timeframes_assumed and len(timeframes) > 1:
+            vr.caveats.append(
+                f"the video didn't name a timeframe; this claim is tested across {', '.join(timeframes)}"
+            )
+        runs.append(vr)
+    return runs
 
 
 # ---------------------------------------------------------------------------
@@ -109,13 +133,13 @@ def _test_indicator_value_over_range(
     mcp.call("chart_set_symbol", {"symbol": symbol})
     mcp.call("chart_set_timeframe", {"timeframe": timeframe})
     if indicator_name:
-        mcp.call("chart_manage_indicator", {"action": "add", "name": indicator_name})
+        _ensure_indicator(indicator_name, mcp)
 
     ohlcv = mcp.call("data_get_ohlcv", {"summary": False, "limit": config.default_lookback_days})
     bars = _ohlcv_bars(ohlcv)
     if len(bars) < 30:
         return ValidationRun(
-            claim_id=claim.id, test_type=claim.test_type, status="insufficient_data",
+            claim_id=claim.id, test_type=claim.test_type, timeframe=timeframe, status="insufficient_data",
             tradingview_query=f"{symbol} {timeframe} OHLCV", data_summary=f"only {len(bars)} bars available",
             occurrences=None, hit_rate=None,
             result=f"insufficient market data for {symbol} on {timeframe}", caveats=[],
@@ -129,7 +153,7 @@ def _test_indicator_value_over_range(
     occ, hits = _count_indicator_trigger(bars, indicator_series, trigger)
     if occ == 0:
         return ValidationRun(
-            claim_id=claim.id, test_type=claim.test_type, status="insufficient_data",
+            claim_id=claim.id, test_type=claim.test_type, timeframe=timeframe, status="insufficient_data",
             tradingview_query=_query_str(symbol, timeframe, indicator_name, trigger),
             data_summary=f"the trigger condition never occurred in {len(bars)} bars",
             occurrences=0, hit_rate=None,
@@ -138,7 +162,7 @@ def _test_indicator_value_over_range(
 
     rate = hits / occ
     return ValidationRun(
-        claim_id=claim.id, test_type=claim.test_type, status="ok",
+        claim_id=claim.id, test_type=claim.test_type, timeframe=timeframe, status="ok",
         tradingview_query=_query_str(symbol, timeframe, indicator_name, trigger),
         data_summary=(
             f"{symbol} {timeframe}, last {len(bars)} bars: trigger occurred {occ} times; "
@@ -157,11 +181,13 @@ def _test_level_zone_hit_rate(
     claim: Claim, symbol: str, timeframe: str, mcp: McpClient, config: Config
 ) -> ValidationRun:
     """Check a claim of the shape 'price respects level/zone L'."""
+    mcp.call("chart_set_symbol", {"symbol": symbol})
+    mcp.call("chart_set_timeframe", {"timeframe": timeframe})
     ohlcv = mcp.call("data_get_ohlcv", {"summary": False, "limit": config.default_lookback_days})
     bars = _ohlcv_bars(ohlcv)
     if len(bars) < 30:
         return ValidationRun(
-            claim_id=claim.id, test_type=claim.test_type, status="insufficient_data",
+            claim_id=claim.id, test_type=claim.test_type, timeframe=timeframe, status="insufficient_data",
             tradingview_query=f"{symbol} {timeframe} OHLCV", data_summary=f"only {len(bars)} bars available",
             occurrences=None, hit_rate=None,
             result=f"insufficient market data for {symbol} on {timeframe}", caveats=[],
@@ -170,7 +196,7 @@ def _test_level_zone_hit_rate(
     level = _guess_level(claim.statement, bars)
     if level is None:
         return ValidationRun(
-            claim_id=claim.id, test_type=claim.test_type, status="error",
+            claim_id=claim.id, test_type=claim.test_type, timeframe=timeframe, status="error",
             tradingview_query=f"{symbol} {timeframe} OHLCV",
             data_summary="could not determine a numeric level/zone from the claim",
             occurrences=None, hit_rate=None,
@@ -181,7 +207,7 @@ def _test_level_zone_hit_rate(
     occ, reversed_count = _count_level_respect(bars, level)
     if occ == 0:
         return ValidationRun(
-            claim_id=claim.id, test_type=claim.test_type, status="insufficient_data",
+            claim_id=claim.id, test_type=claim.test_type, timeframe=timeframe, status="insufficient_data",
             tradingview_query=f"{symbol} {timeframe} around {level:g}",
             data_summary=f"price never came within {_LEVEL_TOLERANCE:.1%} of {level:g} in {len(bars)} bars",
             occurrences=0, hit_rate=None,
@@ -191,7 +217,7 @@ def _test_level_zone_hit_rate(
     rate = reversed_count / occ
     broke = occ - reversed_count
     return ValidationRun(
-        claim_id=claim.id, test_type=claim.test_type, status="ok",
+        claim_id=claim.id, test_type=claim.test_type, timeframe=timeframe, status="ok",
         tradingview_query=f"{symbol} {timeframe} around {level:g}",
         data_summary=(
             f"{symbol} {timeframe}, last {len(bars)} bars: price approached {level:g} on {occ} occasions; "
@@ -438,12 +464,52 @@ def _count_level_respect(bars, level: float) -> tuple[int, int]:
 # ---------------------------------------------------------------------------
 
 
-def _untestable(claim: Claim, reason: str) -> ValidationRun:
+def _untestable(claim: Claim, timeframe: str, reason: str) -> ValidationRun:
     return ValidationRun(
-        claim_id=claim.id, test_type=claim.test_type, status="error",
+        claim_id=claim.id, test_type=claim.test_type, timeframe=timeframe, status="error",
         tradingview_query="", data_summary="", occurrences=None, hit_rate=None,
         result=f"untestable — {reason}", caveats=[], error=reason,
     )
+
+
+def _ensure_indicator(indicator_name: str, mcp: McpClient) -> None:
+    """Make sure `indicator_name` is loaded on the chart, respecting TV's per-account
+    indicator cap. If already present, do nothing. If the chart is at the cap, remove
+    the oldest study to make room. Errors are swallowed — the worst case is the
+    indicator wasn't added, and the trigger-counter will skip bars with no value.
+    """
+    try:
+        state = mcp.call("chart_get_state", {})
+    except McpError:
+        # Couldn't read state — fall through to a naive add. Worst case the add fails
+        # silently and downstream sees no indicator series; handled by the counter.
+        try:
+            mcp.call("chart_manage_indicator", {"action": "add", "name": indicator_name})
+        except McpError:
+            pass
+        return
+
+    studies = state.get("studies", []) if isinstance(state, dict) else []
+    studies = [s for s in studies if isinstance(s, dict)]
+    if any(s.get("name") == indicator_name for s in studies):
+        return  # already loaded — nothing to do
+
+    if len(studies) >= _TV_FREE_INDICATOR_CAP:
+        # Remove the oldest study to make room. We can't tell which is "oldest" from
+        # state alone — TradingView returns them in the order they were added, so the
+        # first entry is the oldest. Defensive: only remove if we have a valid id.
+        oldest = studies[0]
+        oldest_id = oldest.get("id")
+        if oldest_id:
+            try:
+                mcp.call("chart_manage_indicator", {"action": "remove", "id": oldest_id})
+            except McpError:
+                pass  # if remove fails, the add below will likely fail too — that's fine
+
+    try:
+        mcp.call("chart_manage_indicator", {"action": "add", "name": indicator_name})
+    except McpError:
+        pass  # honest failure — counter will see no indicator series and skip bars
 
 
 def _query_str(symbol, timeframe, indicator, trigger) -> str:

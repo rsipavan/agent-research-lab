@@ -33,6 +33,7 @@ def _config(**overrides) -> Config:
         max_claims_per_video=3, min_confidence=0.5, mcp_retries=1, mcp_timeout_seconds=60,
         tracing_enabled=False, tracing_dir="traces",
         runs_enabled=False, runs_dir="runs",
+        test_timeframes=["1D", "4H", "1H"],
     )
     base.update(overrides)
     return Config(**base)
@@ -103,48 +104,66 @@ def test_gate_claim_cap_keeps_most_central():
 # --------------------------------------------------------------------------- verdict thresholds
 
 
-def _ok_run(claim_id="c1", n=20, r=0.7) -> ValidationRun:
-    return ValidationRun(claim_id, "indicator_value_over_range", "ok", "SPY 1D", "summary",
+def _ok_run(claim_id="c1", n=20, r=0.7, tf="1D") -> ValidationRun:
+    return ValidationRun(claim_id, "indicator_value_over_range", tf, "ok", f"SPY {tf}", "summary",
                          occurrences=n, hit_rate=r, result=f"{r:.0%}", caveats=[])
 
 
 def test_verdict_holds_when_strong_and_enough_n():
     claim = Claim("c1", "x", "SPY", "1D", "indicator_value_over_range", "yes", None, 0.9)
-    v, _ = report_mod._verdict_for(claim, _ok_run(n=20, r=0.8))
+    v, _ = report_mod._verdict_for(claim, [_ok_run(n=20, r=0.8)])
     assert v == "holds"
 
 
 def test_verdict_fails_when_weak():
     claim = Claim("c1", "x", "SPY", "1D", "indicator_value_over_range", "yes", None, 0.9)
-    v, _ = report_mod._verdict_for(claim, _ok_run(n=20, r=0.3))
+    v, _ = report_mod._verdict_for(claim, [_ok_run(n=20, r=0.3)])
     assert v == "fails"
 
 
 def test_verdict_partial_when_coinflip():
     claim = Claim("c1", "x", "SPY", "1D", "indicator_value_over_range", "yes", None, 0.9)
-    v, _ = report_mod._verdict_for(claim, _ok_run(n=20, r=0.55))
+    v, _ = report_mod._verdict_for(claim, [_ok_run(n=20, r=0.55)])
     assert v == "partial"
 
 
 def test_verdict_partial_when_too_few_occurrences():
     claim = Claim("c1", "x", "SPY", "1D", "indicator_value_over_range", "yes", None, 0.9)
-    v, _ = report_mod._verdict_for(claim, _ok_run(n=4, r=0.9))
+    v, _ = report_mod._verdict_for(claim, [_ok_run(n=4, r=0.9)])
     assert v == "partial"  # great rate but n too small
 
 
 def test_verdict_untestable_for_no_claim():
     claim = Claim("c1", "it's a vibe", None, None, "none", "no", "this is an opinion", 0.6)
-    v, reason = report_mod._verdict_for(claim, None)
+    v, reason = report_mod._verdict_for(claim, [])
     assert v == "untestable"
     assert "opinion" in reason
 
 
 def test_verdict_untestable_on_mcp_error():
     claim = Claim("c1", "x", "FAKE", "1D", "indicator_value_over_range", "yes", None, 0.9)
-    run = ValidationRun("c1", "indicator_value_over_range", "error", "", "", None, None,
+    run = ValidationRun("c1", "indicator_value_over_range", "1D", "error", "", "", None, None,
                         "untestable — could not resolve \"FAKE\"", caveats=[], error="symbol not found")
-    v, _ = report_mod._verdict_for(claim, run)
+    v, _ = report_mod._verdict_for(claim, [run])
     assert v == "untestable"
+
+
+def test_verdict_holds_when_all_timeframes_hold():
+    """Multi-timeframe: all timeframes hold → claim holds."""
+    claim = Claim("c1", "x", "SPY", None, "indicator_value_over_range", "yes", None, 0.9)
+    runs = [_ok_run(n=20, r=0.8, tf="1D"), _ok_run(n=15, r=0.75, tf="4H"), _ok_run(n=12, r=0.7, tf="1H")]
+    v, reason = report_mod._verdict_for(claim, runs)
+    assert v == "holds"
+    assert "1D" in reason and "4H" in reason and "1H" in reason
+
+
+def test_verdict_partial_when_timeframes_disagree():
+    """Multi-timeframe: holds on one TF, fails on another → partial with 'disagree' surfaced."""
+    claim = Claim("c1", "x", "SPY", None, "indicator_value_over_range", "yes", None, 0.9)
+    runs = [_ok_run(n=20, r=0.8, tf="1D"), _ok_run(n=20, r=0.3, tf="1H")]
+    v, reason = report_mod._verdict_for(claim, runs)
+    assert v == "partial"
+    assert "disagree" in reason.lower()
 
 
 # --------------------------------------------------------------------------- report aggregation
@@ -153,7 +172,7 @@ def test_verdict_untestable_on_mcp_error():
 def _finding(verdict):
     claim = Claim("c", "x", "SPY", "1D", "indicator_value_over_range", "yes", None, 0.9)
     from agent_research_lab.types import ClaimFinding
-    return ClaimFinding(claim=claim, validation=None, verdict=verdict, verdict_reason="")
+    return ClaimFinding(claim=claim, validations=[], verdict=verdict, verdict_reason="")
 
 
 def test_aggregate_empty_is_untestable():

@@ -134,6 +134,10 @@ ValidationStatus = Literal["ok", "error", "insufficient_data"]
 class ValidationRun:
     """The result of running one test against real market data via the TradingView MCP.
 
+    One ValidationRun = one (claim, timeframe) test. A single claim is typically
+    validated across several timeframes and produces several ValidationRuns; the
+    per-claim verdict aggregates over them (see report.py).
+
     The validator reports the *rate* (e.g. "bounced 14 of 22 occurrences"); it does
     NOT assign a verdict. report.py turns this into holds/partial/fails/untestable
     by explicit rules — see docs/validation_logic.md.
@@ -141,6 +145,7 @@ class ValidationRun:
 
     claim_id: str
     test_type: TestType
+    timeframe: str  # which timeframe this run tested (e.g. "1D", "4H", "1H")
     status: ValidationStatus
     tradingview_query: str  # human-readable description of what was queried (symbol, timeframe, indicator, range)
     data_summary: str  # what the data showed, in plain language
@@ -161,8 +166,8 @@ Verdict = Literal["holds", "partial", "fails", "untestable"]
 @dataclass
 class ClaimFinding:
     claim: Claim
-    validation: ValidationRun | None  # None if the claim was never validated (testable == "no")
-    verdict: Verdict
+    validations: list[ValidationRun]  # one per timeframe tested; empty if claim was never validated
+    verdict: Verdict  # aggregate across timeframes
     verdict_reason: str
 
 
