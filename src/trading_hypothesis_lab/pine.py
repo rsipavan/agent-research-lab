@@ -109,9 +109,31 @@ def run(
         )
 
     # --- step 3: resolve symbol and run backtest ---
-    try:
-        metrics = _run_backtest(instrument, timeframe, mcp)
-    except McpError as e:
+    # Try the claim's timeframe first, then fall back to wider frames if 0 trades.
+    # Free TradingView only shows ~5 000 bars, so short timeframes have very little
+    # history. 15m → 1H → 1D gives progressively more data without changing the
+    # instrument, and the strategy logic is timeframe-agnostic (RSI + price swings).
+    _TF_FALLBACKS = {"1": "5", "5": "15", "15": "60", "60": "240", "240": "D"}
+    tried_timeframes = [timeframe]
+    metrics: StrategyBacktestMetrics | None = None
+    actual_tf = timeframe
+    last_mcp_err: McpError | None = None
+
+    for tf_attempt in tried_timeframes:
+        try:
+            metrics = _run_backtest(instrument, tf_attempt, mcp)
+        except McpError as e:
+            last_mcp_err = e
+            break
+        if metrics is not None:
+            actual_tf = tf_attempt
+            break
+        # 0 trades — try next wider timeframe once
+        next_tf = _TF_FALLBACKS.get(tf_attempt)
+        if next_tf and next_tf not in tried_timeframes:
+            tried_timeframes.append(next_tf)
+
+    if last_mcp_err is not None:
         return ValidationRun(
             claim_id=claim.id,
             test_type="strategy_backtest",
@@ -121,23 +143,31 @@ def run(
             data_summary="",
             occurrences=None,
             hit_rate=None,
-            result=f"strategy compiled but backtest failed: {e}",
+            result=f"strategy compiled but backtest failed: {last_mcp_err}",
             caveats=[],
             pine_script_path=pine_path,
         )
 
     if metrics is None:
+        tfs_tried = " → ".join(tried_timeframes)
         return ValidationRun(
             claim_id=claim.id,
             test_type="strategy_backtest",
             timeframe=timeframe,
             status="insufficient_data",
             tradingview_query=f"{instrument} {timeframe} Pine Strategy",
-            data_summary="strategy compiled but produced no trades",
+            data_summary=f"strategy compiled but produced no trades on {tfs_tried}",
             occurrences=0,
             hit_rate=None,
-            result=f"strategy compiled but produced no trades on {instrument} {timeframe} — adjust the date range or instrument",
-            caveats=["no trades means the entry conditions never fired in the tested window"],
+            result=(
+                f"strategy compiled but produced no trades on {instrument} "
+                f"({tfs_tried} tried) — free-plan data window may be too short "
+                f"for this strategy's setup frequency"
+            ),
+            caveats=[
+                "no trades means entry conditions never fired in the available history",
+                "free TradingView shows ~5 000 bars per timeframe; paid plan has 20 000+",
+            ],
             pine_script_path=pine_path,
         )
 
@@ -154,14 +184,15 @@ def run(
         )
 
     win_rate_pct = f"{metrics.win_rate:.0%}"
+    tf_note = f" (fell back from {timeframe})" if actual_tf != timeframe else ""
     return ValidationRun(
         claim_id=claim.id,
         test_type="strategy_backtest",
-        timeframe=timeframe,
+        timeframe=actual_tf,
         status="ok",
-        tradingview_query=f"{instrument} {timeframe} Pine Strategy (strategy tester)",
+        tradingview_query=f"{instrument} {actual_tf} Pine Strategy (strategy tester){tf_note}",
         data_summary=(
-            f"{instrument} {timeframe}: {metrics.total_trades} trades, "
+            f"{instrument} {actual_tf}: {metrics.total_trades} trades, "
             f"{win_rate_pct} win rate, net {metrics.net_profit:+.2f}, "
             f"max drawdown {metrics.max_drawdown:.2f}, PF {metrics.profit_factor:.2f}"
         ),
