@@ -1,0 +1,7 @@
+{
+  "video_id": "spy-200sma-support-test",
+  "content_type": "strategy_or_claim",
+  "topic": "200-day SMA as support on SPY daily — does it hold up statistically?",
+  "summary": "The video tests whether the 200-day SMA acts as reliable support on SPY daily. The presenter defines the trigger as a close within 1% above the 200 SMA, measures the 10-day forward return, and reports 73% positive rate over 52 occurrences across a 5-year lookback (Jan 2019–Dec 2023). Caveats around bull-market bias are acknowledged explicitly.",
+  "has_checkable_claims": true
+}

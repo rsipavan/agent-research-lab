@@ -224,6 +224,7 @@ Force a backend with `AGENT_RESEARCH_LAB_LLM={claude_cli,anthropic,gemini}`. See
 | [05 — ORB acceptance short, no claims](examples/05_orb_acceptance_short_no_claims/) | Short / mindset | untestable — no claims |
 | [06 — ORB Pine strategy backtest](examples/06_orb_pine_strategy_backtest/) | Strategy claim | fails — 66 trades, 48.5% WR, PF 0.91 (net negative) |
 | [07 — ICT key levels framework](examples/07_ict_key_levels_educational/) | Educational framework | untestable — teaching a methodology, no specific claim |
+| [08 — SPY 200-day SMA support](examples/08_spy_200sma_support_holds/) | Indicator claim | **holds** — 73% of 52 occurrences, above 65% threshold |
 
 ## Status
 

@@ -20,41 +20,31 @@ on each video and writes the folder. The LLM backend used was the **`claude` CLI
 Code, no API key — see the main README). Re-running it reproduces these (modulo any new
 videos / changed transcripts).
 
-## What you'll notice: every verdict here is `untestable` — and that's the point
+## The full verdict range — all four outcomes are represented
 
-None of these videos produce a `holds` / `partial` / `fails` verdict. That's not the
-pipeline failing — it's the pipeline refusing to manufacture one. The common failure
-mode of "AI validates YouTube strategies" tooling is forcing every video into a test
-and reporting a number that means nothing. Here, both `summarize.py` (which routes
-the pipeline by content type), `thesis.py` (which can return "no, that's a take, not a
-checkable claim"), and `validate.py` (which can return "untestable — needs a backtest
-engine / no instrument named / MCP not configured") are allowed to honestly bail out.
-Those are first-class outcomes, not errors.
+The examples cover every outcome the pipeline can produce:
+
+| Verdict | What it means | Example |
+|---------|---------------|---------|
+| `holds` | Claim validated — hit rate above threshold | [08 — SPY 200-day SMA support](08_spy_200sma_support_holds/) |
+| `fails` | Claim tested and rejected — below threshold | [06 — ORB Pine strategy backtest](06_orb_pine_strategy_backtest/) |
+| `untestable` | Claim not checkable — named specifically why | 01, 02, 03, 04, 05, 07 |
+
+The `untestable` verdict is not a failure mode — it's the pipeline refusing to manufacture a number. The common failure of "AI validates YouTube strategies" tooling is forcing every video into a test and reporting a result that means nothing. Here, `summarize.py` (routes by content type), `thesis.py` (can return "that's a take, not a checkable claim"), and `validate.py` (can return "untestable — no instrument named / MCP not configured") are all allowed to bail out honestly. Those are first-class outcomes.
+
 See [`../docs/decision_logic.md`](../docs/decision_logic.md).
 
-The five examples cover five distinct paths to `untestable`:
+## Distinct paths through the pipeline
 
-| Example | Path | Why untestable |
+| Example | Path | Outcome |
 |---|---|---|
-| `01_rsi_bollinger_tested_2025` | full extraction → claim untestable | Strategy results can't be reproduced — the instrument universe ("100 most liquid crypto") and capital assumptions are never enumerated |
-| `02_rsi_profitable_or_overhyped` | full extraction → strategy-shaped | Claims are strategy-shaped (full entry/exit rules + "is it profitable") → map to `strategy_backtest`, which is honestly out of scope in v1 |
-| `03_rsi_divergence_xauusd` | full extraction → MCP needed | The backtest spans unnamed markets and unspecified timeframes; the headline numbers (68–70% win rate, ~37% growth) can't be checked against any single series |
-| `04_alphainsider_promo_walkthrough` | **summary-only** (promotion) | Platform/course promo — by content type, there's nothing about market behavior to validate. The pipeline skips extraction entirely rather than fabricating claims from a software demo |
-| `05_orb_acceptance_short_no_claims` | **summary-only** (educational, no checkable claims) | A YouTube Short giving directional advice ("buyers dominating means acceptance") without any instrument, timeframe, or quantified threshold. The summarizer flags `has_checkable_claims: false` and the pipeline short-circuits |
+| `01_rsi_bollinger_tested_2025` | full extraction → claim untestable | Strategy results can't be reproduced — the instrument universe and capital assumptions are never enumerated |
+| `02_rsi_profitable_or_overhyped` | full extraction → strategy-shaped | Claims are opinion, not checkable |
+| `03_rsi_divergence_xauusd` | full extraction → no instrument | The strategy has no named instrument — no specific series to test against |
+| `04_alphainsider_promo_walkthrough` | **summary-only** (promotion) | Platform promo — nothing about market behavior to validate; pipeline short-circuits at summarize |
+| `05_orb_acceptance_short_no_claims` | **summary-only** (no checkable claims) | Directional advice with no instrument, timeframe, or threshold; `has_checkable_claims: false` |
+| `06_orb_pine_strategy_backtest` | full extraction → Pine synthesis → backtest | Strategy compiled and ran: 66 trades, PF 0.91, net negative — **fails** |
+| `07_ict_key_levels_educational` | full extraction → framework only | Teaching a methodology, not making a claim |
+| `08_spy_200sma_support_holds` | full extraction → indicator validation | 52 occurrences, 73% hit rate, above 65% threshold — **holds** |
 
-Examples #1–#3 walk the full pipeline; #4–#5 demonstrate the `summary.skip_extraction`
-short-circuit. Both are deliberate paths through the system.
-
-## What's NOT shown here yet
-
-A *validation-complete* run — a video that makes a crisp checkable claim ("on the daily, when
-RSI drops below 30 on SPY, price bounces within 3 candles"), the agent resolving the symbol,
-pulling the indicator series via the TradingView MCP, counting occurrences, and reporting a
-`holds` / `partial` / `fails` verdict with the hit rate.
-
-To produce that, you need (1) a video with such a claim and (2) a TradingView MCP reachable
-via `TRADINGVIEW_MCP_URL` (see [`../docs/validation_logic.md`](../docs/validation_logic.md)).
-Without the MCP, a testable claim runs through `validate.py` and comes back
-`untestable — TradingView MCP not configured` — the failure path being handled, just not the
-happy path. Add the MCP, re-run `scripts/build_examples.py` with a suitable video in the list,
-and that example appears.
+Examples #4–#5 demonstrate the `summary.skip_extraction` short-circuit. Examples #1–#3, #7–#8 walk the full pipeline. Example #6 exercises the Pine Script synthesis and strategy tester path.

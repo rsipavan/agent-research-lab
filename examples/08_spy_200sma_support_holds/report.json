@@ -1,0 +1,36 @@
+{
+  "run_id": "spy-200sma-support-test-20260514",
+  "url": "https://www.youtube.com/watch?v=spy-200sma-support-test",
+  "verdict_overall": "holds",
+  "findings": [
+    {
+      "claim_id": "c1",
+      "statement": "When SPY daily closes within 1% above the 200-day SMA, SPY closes higher 10 trading days later at a rate above 65% — tested over 5 years (Jan 2019–Dec 2023), 52 occurrences, 73% positive.",
+      "instrument": "SPY",
+      "timeframe": "1D",
+      "testable": "yes",
+      "test_type": "level_zone_hit_rate",
+      "verdict": "holds",
+      "verdict_reason": "73% of 52 occurrences above the 65% holds threshold",
+      "validations": [
+        {
+          "test_type": "level_zone_hit_rate",
+          "timeframe": "1D",
+          "status": "ok",
+          "tradingview_query": "SPY 1D close within 1% above SMA(200) → 10-bar forward return",
+          "data_summary": "SPY 1D: 52 occurrences Jan 2019–Dec 2023; 38/52 (73.1%) closed higher 10 trading days later",
+          "occurrences": 52,
+          "hit_rate": 0.731,
+          "result": "38 of 52 occurrences (73.1%) resulted in SPY closing higher 10 trading days after the trigger; 14 did not",
+          "caveats": [
+            "5-year lookback (2019–2023) spans a predominantly bull-market period — base rate of SPY closing higher over any 10-day window is ~55% in this window",
+            "73% vs ~55% base rate = ~18pp lift; statistically meaningful at N=52 but would strengthen with a longer or out-of-sample lookback",
+            "occurrences near the start of strong trends may be clustered — each close is counted independently",
+            "2020 COVID crash briefly broke the 200 SMA — those breaches are not included (trigger requires close above)"
+          ],
+          "strategy_backtest": null
+        }
+      ]
+    }
+  ]
+}

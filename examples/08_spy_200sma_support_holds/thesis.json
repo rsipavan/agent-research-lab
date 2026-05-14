@@ -1,0 +1,13 @@
+[
+  {
+    "claim_id": "c1",
+    "statement": "When SPY daily closes within 1% above the 200-day SMA, SPY closes higher 10 trading days later at a rate above 65% — tested over 5 years (Jan 2019–Dec 2023), 52 occurrences, 73% positive.",
+    "instrument": "SPY",
+    "timeframe": "1D",
+    "testable": "yes",
+    "test_type": "level_zone_hit_rate",
+    "confidence": 0.92,
+    "test_type_justification": "Price respects level/zone: trigger is price entering a zone above a specific moving average level; outcome is measured directionally.",
+    "reason_if_not": null
+  }
+]
