@@ -86,6 +86,35 @@ For indicator claims, `validate.py` tests across multiple timeframes (default: 1
 
 Timeframe priority: `--timeframe` CLI flag > claim-extracted timeframe > config defaults.
 
+## Pine Script compile-repair loop
+
+`pine.py`'s `_compile_and_fix()` loop is worth explaining separately because its design reflects a specific choice about where to put trust.
+
+The loop:
+1. Set source via MCP → smart compile → read errors
+2. If no errors: return the script
+3. If errors remain and retries are available: LLM fix call → loop
+4. If errors persist after all retries: return the script with the error list — caller marks the run as `insufficient_data`, file is still saved, trace logs what happened
+
+The key design choice: **the goal was not "trust the model to produce valid Pine." The goal was "design a workflow where model failures become observable and recoverable."**
+
+This changes what matters:
+
+- The LLM synthesizing imperfect Pine on the first pass is expected and fine — the compile loop catches it
+- Bounded retries (max 3) mean a bad script never blocks a run indefinitely
+- Explicit failure states (`pine_max_retries`, `pine_compile_error`) mean the system reports what happened precisely — not "error," but which failure mode, at which step
+- The `.pine` file is written to disk regardless of compile outcome — you can inspect, fix, and re-run manually
+- The trace logs each fix attempt with timing
+
+In practice, the Claude CLI backend has been more stable than the standard API for iterative repair because it:
+- Preserves intent during repairs (makes localized fixes rather than rewriting entire scripts)
+- Handles multi-turn compiler feedback chains more reliably
+- Maintains architectural consistency across retries (e.g., doesn't silently drop stop-loss rules to fix a compile error)
+
+But that's a secondary observation. The primary design is that **even if the synthesis model performs poorly, the system architecture ensures the failure is caught, named, logged, and recoverable** — not silently swallowed or misleadingly reported as a success.
+
+This same principle governs the broader pipeline: synthesis is separated from validation so that a model's output quality is never the last line of defense.
+
 ## Why these boundaries
 
 - **`thesis.py` is separate from `validate.py`** because "what is testable" is a different judgment from "run the test." `thesis.py` is allowed to say "no, that's an opinion" — and that's a first-class outcome, not an error.
