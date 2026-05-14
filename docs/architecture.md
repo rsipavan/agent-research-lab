@@ -8,7 +8,7 @@ One vertical slice, sequential orchestration, each module with one job and a sma
 
 ```mermaid
 flowchart TD
-    TB[telegram_bot.py] -->|url| ORC[orchestrate.py]
+    TB[telegram_bot.py\nlive progress + chart screenshots] -->|url| ORC[orchestrate.py]
     ORC -->|url| TR[transcript.py]
     TR -->|Transcript| ORC
     ORC -->|Transcript| SUM[summarize.py]
@@ -17,8 +17,10 @@ flowchart TD
     DEC -- no --> REP
     DEC -- yes --> TH[thesis.py]
     TH -->|ThesisSet| ORC
-    ORC -->|Claim each| VAL[validate.py]
+    ORC -->|Claim — indicator/level| VAL[validate.py]
+    ORC -->|Claim — strategy_backtest| PINE[pine.py]
     VAL -->|ValidationRun| ORC
+    PINE -->|ValidationRun + .pine file| ORC
     ORC -->|Transcript, VideoSummary, ThesisSet, runs| REP[report.py]
     REP -->|Report| ORC
     ORC -->|Report| TB
@@ -27,37 +29,99 @@ flowchart TD
 
 | Module | Input | Output | Depends on |
 |---|---|---|---|
-| `transcript.py` | `url: str` | `Transcript {video_id, title, channel, url, text, fetched_at}` | `youtube-transcript-api` |
-| `summarize.py` | `Transcript` | `VideoSummary {content_type, topic, summary, has_checkable_claims}` — runs first; routes the pipeline (non-claim videos skip extraction) | `llm.py` |
-| `thesis.py` | `Transcript`, `VideoSummary` | `ThesisSet {video_id, claims: list[Claim]}` where `Claim {id, statement, instrument, timeframe, test_type, testable: "yes"|"partial"|"no", reason_if_not, confidence}` | `llm.py`, `config.yml` (extraction) |
-| `validate.py` | `Claim` | `ValidationRun {claim_id, test_type, status: "ok"|"error"|"insufficient_data", tradingview_query, data_summary, result, caveats}` | `mcp_client.py` (TradingView MCP), `config.yml` (test_types, validation) |
-| `report.py` | `Transcript`, `VideoSummary`, `ThesisSet`, `list[ValidationRun]` | `Report {video, video_summary, claims_table, per_claim_findings, verdict_overall, markdown, json}` — markdown leads with a "What this video is" section | `llm.py` (narrative synthesis only — the verdicts are computed, not LLM-judged) |
-| `llm.py` | `system, prompt` | `str` | auto-detects: `claude` CLI (default, no key) → Anthropic API → Gemini API |
-| `mcp_client.py` | `tool_name, args` | `dict` | TradingView MCP (HTTP/SSE via `TRADINGVIEW_MCP_URL`); retries per config; raises `McpError` (which `validate.py` turns into an `error` ValidationRun) |
-| `orchestrate.py` | `url: str` | `Report` | all of the above; writes `traces/<run-id>.jsonl` |
-| `telegram_bot.py` | Telegram update with a YouTube URL | replies with `Report.markdown` | `orchestrate.py`, `python-telegram-bot`, `.env` (token, allowlist) |
+| `transcript.py` | `url: str` | `Transcript {video_id, title, channel, url, text, word_count}` | `youtube-transcript-api` |
+| `summarize.py` | `Transcript` | `VideoSummary {content_type, topic, summary, has_checkable_claims}` — runs first; routes the pipeline; non-claim videos (mindset/vlog/promo) skip extraction | `llm.py` |
+| `thesis.py` | `Transcript`, `VideoSummary` | `ThesisSet {video_id, claims: list[Claim]}` where `Claim {id, statement, instrument, timeframe, test_type, testable: "yes"\|"partial"\|"no", reason_if_not, confidence}` | `llm.py`, `config.yml` |
+| `validate.py` | `Claim` (indicator/level only) | `list[ValidationRun]` — one per timeframe tested | `mcp_client.py`, `config.yml` |
+| `pine.py` | `Claim` (strategy_backtest only), `Transcript`, `VideoSummary` | `ValidationRun` with embedded `StrategyBacktestMetrics` and `.pine` file path | `llm.py`, `mcp_client.py` |
+| `report.py` | `Transcript`, `VideoSummary`, `ThesisSet`, `list[ValidationRun]` | `Report {findings, verdict_overall, markdown, json}` — verdicts computed by explicit thresholds, not LLM-judged | — |
+| `watchlist.py` | `name: str` | `list[str]` symbol list; `run_watchlist()` applies a claim across all symbols | `validate.py` |
+| `llm.py` | `system, prompt` | `str` | auto-detects: `claude` CLI → Anthropic API → Gemini API |
+| `mcp_client.py` | `tool_name, args` | `dict` | TradingView MCP (spawned via `TRADINGVIEW_MCP_CMD`); retries once; converts errors to `McpError` |
+| `orchestrate.py` | `url: str` | `Report` | all modules; writes traces; fires `step_callback` for live Telegram progress |
+| `telegram_bot.py` | Telegram message with YouTube URL | edits live status + sends chart photos + sends report text + sends `.pine` attachments | `orchestrate.py`, `mcp_client.py`, `python-telegram-bot` |
+
+## Claim routing
+
+`orchestrate.py` splits testable claims by `test_type` before entering the MCP session:
+
+```python
+backtest_claims  = [c for c in thesis.testable_claims if c.test_type == "strategy_backtest"]
+indicator_claims = [c for c in thesis.testable_claims if c.test_type != "strategy_backtest"]
+
+for claim in indicator_claims:
+    runs.extend(validate_mod.run(claim, config, mcp, timeframes_override=...))
+
+for claim in backtest_claims:
+    runs.append(pine_mod.run(claim, transcript, summary, config, mcp, out_dir=run_dir))
+```
+
+Both paths return `ValidationRun` objects. `report.py` handles them uniformly — it detects strategy results via `vr.strategy_backtest is not None`.
+
+## Verdict computation
+
+Verdicts are computed by explicit thresholds in `report.py`, not generated by the LLM:
+
+**Indicator / level claims:**
+- `hit_rate >= 0.65` AND `n >= 10` → `holds`
+- `hit_rate < 0.45` → `fails`
+- otherwise → `partial`
+- `n < 10` → `partial` (insufficient sample regardless of rate)
+
+**Strategy backtest claims:**
+- `profit_factor >= 1.5` AND `net_profit > 0` AND `total_trades >= 20` → `holds`
+- `profit_factor < 1.0` OR `net_profit < 0` → `fails`
+- otherwise → `partial`
+- `total_trades < 20` → `partial` (too few trades)
+
+These thresholds are constants in `report.py`. They apply the same way to every run — no per-video calibration, no LLM judgment.
+
+## Multi-timeframe aggregation
+
+For indicator claims, `validate.py` tests across multiple timeframes (default: 1H, 4H, D, W from `config.yml`). `report.py`'s `_verdict_for()` aggregates:
+
+- All timeframes agree → that verdict
+- Timeframes disagree → `partial` with a breakdown showing each timeframe's rate
+- All timeframes untestable → `untestable`
+
+Timeframe priority: `--timeframe` CLI flag > claim-extracted timeframe > config defaults.
 
 ## Why these boundaries
 
-- **`thesis.py` is separate from `validate.py`** because "what is testable" is a different judgment from "run the test." Conflating them is how you end up validating things that were never checkable. `thesis.py` is allowed to say "no, that's an opinion" — and that's a first-class outcome, not an error.
-- **`report.py` computes verdicts, the LLM only narrates.** `verdict ∈ {holds, partial, fails, untestable}` is derived from the `ValidationRun` data by explicit rules in `report.py`, not asked of a model. The LLM writes the human-readable summary around those computed verdicts. This keeps the conclusion auditable.
-- **`orchestrate.py` owns tracing.** Each module returns plain data; it doesn't know about tracing. The orchestrator logs `{step, input_summary, output_summary, duration_ms, ok}` per step. One place to change the trace format.
-- **`telegram_bot.py` is the only stateful, long-running thing.** Everything else is pure-ish functions over data. You can run the whole pipeline from the CLI (`orchestrate.py`) with no Telegram involved — that's how `examples/` were built.
+- **`thesis.py` is separate from `validate.py`** because "what is testable" is a different judgment from "run the test." `thesis.py` is allowed to say "no, that's an opinion" — and that's a first-class outcome, not an error.
+- **`pine.py` is separate from `validate.py`** because strategy synthesis (LLM → code → compile → backtest) is a fundamentally different workflow from indicator measurement. The failure modes, retries, and outputs are all different.
+- **`report.py` computes verdicts, the LLM only extracts claims.** `verdict ∈ {holds, partial, fails, untestable}` is derived from `ValidationRun` data by explicit rules. Same data → same verdict, always.
+- **`orchestrate.py` owns tracing and step callbacks.** Each module returns plain data; it doesn't know about tracing or progress. One place to change either.
+- **`telegram_bot.py` is the only stateful, long-running component.** Everything else is pure-ish functions over data — you can run the full pipeline from the CLI with no Telegram involved.
 
-## Run-id and traces
+## Run artifacts
 
-`orchestrate.process(url)` mints a run-id (`{video_id}-{YYYYMMDDTHHMMSSZ}`) and writes `traces/<run-id>.jsonl`:
+Every CLI run saves a self-contained bundle to `runs/<run_id>/`:
 
-```jsonl
-{"step": "transcript.fetch", "ok": true, "summary": "fetched 4,210 words from 'XYZ Trading'", "ms": 1840}
-{"step": "thesis.extract", "ok": true, "summary": "2 claims: 1 testable, 1 partial", "ms": 5210}
-{"step": "validate.run", "claim_id": "c1", "ok": true, "summary": "RSI<30 zone, 1D, 365d: claim says 'always bounces'; actual: bounced 14/22 (64%)", "ms": 2300}
-{"step": "validate.run", "claim_id": "c2", "ok": false, "summary": "claim partial — no instrument named; skipped", "ms": 1}
-{"step": "report.build", "ok": true, "summary": "verdict_overall=partial; 1 holds-with-caveats, 1 untestable", "ms": 3100}
+```
+runs/nX_TB0yvUO0-20260514T121851Z/
+├── input.md          # URL + run timestamp
+├── transcript.txt    # fetched transcript text
+├── summary.json      # VideoSummary
+├── thesis.json       # extracted claims
+├── report.md         # human-readable report (5-question structure per claim)
+├── report.json       # structured report (machine-readable)
+├── trace.jsonl       # step-by-step trace
+└── strategy_c1.pine  # synthesized Pine Script (strategy claims only)
 ```
 
-For runs done via the CLI to build `examples/`, the trace is copied into `examples/<n>_<slug>/trace.jsonl` and committed. Ad-hoc runs leave their trace in `traces/` which is gitignored.
+The `runs/` directory is gitignored. `examples/` is the committed, polished version of the same layout — each example is a complete run artifact.
+
+## Trace format
+
+```jsonl
+{"step": "transcript.fetch", "ok": true, "detail": "fetched 4,210 words", "ms": 1840}
+{"step": "video.summarize", "ok": true, "detail": "strategy_or_claim — ORB intraday strategy SPY", "ms": 3200}
+{"step": "thesis.extract", "ok": true, "detail": "1 claims: 1 testable, 0 not", "ms": 5100}
+{"step": "pine.run", "ok": true, "detail": "[orb-c1] Pine synthesis: ok — strategy compiled and backtested", "ms": 28400}
+{"step": "report.build", "ok": true, "detail": "verdict_overall=fails; 1 claim(s)", "ms": 12}
+```
 
 ## What's not here, on purpose
 
-No dependency-injection container. No abstract `Ingestor`/`Validator` base classes (there's exactly one ingester and one validator backend; abstractions for a population of one are noise). No async — the pipeline is IO-bound on a handful of network calls in sequence; `asyncio` would add machinery for no throughput gain at v1 scale. When there's a second ingestion source or a real backtest backend, the boundaries above are where the seams go — but not before.
+No dependency-injection container. No abstract base classes for ingestors or validators (there's one of each; abstractions for a population of one are noise). No general async in the pipeline — it's IO-bound on a handful of sequential network calls; `asyncio` is only in `telegram_bot.py` where it's required by the framework. When there's a second ingestion source or a real strategy engine, the boundaries above are where the seams go — not before.

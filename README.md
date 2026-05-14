@@ -1,5 +1,7 @@
 # agent-research-lab
 
+![tests](https://github.com/rsipavan/agent-research-lab/actions/workflows/test.yml/badge.svg)
+
 **An observable autonomous validation and orchestration system — built for a trading-content domain, transferable to any research problem under uncertainty.**
 
 *By [R Sai Pavan](https://www.linkedin.com/in/sai-pavan-86635b23/) — autonomous systems operator running live algorithmic trading on Indian options markets. This repo is a public, end-to-end demonstration of how I design systems that reason, validate, and degrade gracefully.*
@@ -167,7 +169,8 @@ Force a backend with `AGENT_RESEARCH_LAB_LLM={claude_cli,anthropic,gemini}`. See
 | [03 — RSI divergence on XAUUSD](examples/03_rsi_divergence_xauusd/) | Educational explainer | partial — divergence signal is real but overstated |
 | [04 — AlphaInsider promo walkthrough](examples/04_alphainsider_promo_walkthrough/) | Promotion | untestable — no checkable claim |
 | [05 — ORB acceptance short, no claims](examples/05_orb_acceptance_short_no_claims/) | Short / mindset | untestable — no claims |
-| [06 — ORB Pine strategy backtest](examples/06_orb_pine_strategy_backtest/) | Strategy claim | partial — 66 trades, 48.5% WR, PF 0.91 |
+| [06 — ORB Pine strategy backtest](examples/06_orb_pine_strategy_backtest/) | Strategy claim | fails — 66 trades, 48.5% WR, PF 0.91 (net negative) |
+| [07 — ICT key levels framework](examples/07_ict_key_levels_educational/) | Educational framework | untestable — teaching a methodology, no specific claim |
 
 ## Status
 

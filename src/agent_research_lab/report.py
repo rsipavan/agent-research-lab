@@ -125,6 +125,11 @@ def build_minimal(transcript: Transcript, video_summary: VideoSummary | None, ru
 # ---------------------------------------------------------------------------
 
 
+_MIN_TRADES_TO_CONCLUDE = 20   # strategy backtests need more samples than indicator checks
+_HOLDS_PF = 1.5                # profit_factor >= 1.5 AND net_profit > 0 → holds
+_FAILS_PF = 1.0                # profit_factor < 1.0 OR net_profit < 0 → fails
+
+
 def _verdict_for_one(claim, run: ValidationRun) -> tuple[Verdict, str]:
     if run.status == "error":
         return ("untestable",
@@ -132,6 +137,28 @@ def _verdict_for_one(claim, run: ValidationRun) -> tuple[Verdict, str]:
                 else f"validation failed: {run.error}")
     if run.status == "insufficient_data":
         return "untestable", run.result
+
+    # Strategy backtest: judge on profit_factor and net_profit, not win_rate.
+    # Win rate alone is meaningless without knowing the R:R — a 40% WR on a 2R system is fine.
+    if run.strategy_backtest is not None:
+        sb = run.strategy_backtest
+        if sb.total_trades < _MIN_TRADES_TO_CONCLUDE:
+            return ("partial",
+                    f"only {sb.total_trades} trades — too few to draw a reliable conclusion")
+        if sb.profit_factor >= _HOLDS_PF and sb.net_profit > 0:
+            return ("holds",
+                    f"positive edge: profit factor {sb.profit_factor:.2f}, "
+                    f"win rate {sb.win_rate:.0%}, net profit {sb.net_profit:+,.2f} "
+                    f"over {sb.total_trades} trades")
+        if sb.profit_factor < _FAILS_PF or sb.net_profit < 0:
+            return ("fails",
+                    f"no edge: profit factor {sb.profit_factor:.2f}, "
+                    f"net profit {sb.net_profit:+,.2f} over {sb.total_trades} trades")
+        return ("partial",
+                f"marginal edge: profit factor {sb.profit_factor:.2f}, "
+                f"win rate {sb.win_rate:.0%}, net profit {sb.net_profit:+,.2f} "
+                f"over {sb.total_trades} trades")
+
     n = run.occurrences or 0
     r = run.hit_rate
     if r is None:

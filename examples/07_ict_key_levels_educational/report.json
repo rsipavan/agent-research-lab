@@ -1,0 +1,18 @@
+{
+  "run_id": "nX_TB0yvUO0-20260514T121851Z",
+  "video": {
+    "id": "nX_TB0yvUO0",
+    "url": "https://youtu.be/nX_TB0yvUO0?si=aI0fG9PzZt12gESK",
+    "title": null,
+    "channel": null
+  },
+  "video_summary": {
+    "content_type": "educational",
+    "topic": "key level trading framework over directional bias",
+    "summary": "The video argues that higher timeframe key levels matter more than directional bias, positioning this as the core error many ICT-style traders make. It walks through a trading plan: identify higher timeframe key levels, wait for price to reach them, then use a lower timeframe for entry confirmation and trade to the next key level. Several chart examples across forex pairs (GBP/JPY, GBP/CAD, USD/JPY) are shown to illustrate the concept, with references to a paid community called Edge School.",
+    "has_checkable_claims": false
+  },
+  "verdict_overall": "untestable",
+  "overall_reason": "the summarize step found no checkable market claim in this video \u2014 there's nothing to validate",
+  "findings": []
+}
