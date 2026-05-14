@@ -12,6 +12,29 @@ It's not a trading bot. It doesn't generate signals or execute trades. The domai
 
 ---
 
+## What you need before running this
+
+**Python 3.10+** — check with `python --version`.
+
+**Claude Code (the `claude` CLI)** — this is the default LLM backend for claim extraction and Pine Script synthesis. Install it from [claude.ai/code](https://claude.ai/code) or via npm:
+```bash
+npm install -g @anthropic-ai/claude-code
+```
+Once installed, run `claude` once to authenticate with your Anthropic account. No API key setup needed — it uses your Claude subscription. If you'd rather use the Anthropic or Gemini API directly, see the LLM backend section below.
+
+**YouTube transcripts** — the pipeline pulls captions from YouTube via `youtube-transcript-api`. This works on any video that has transcripts enabled (auto-generated or manual). If a video has transcripts disabled, the run returns `untestable — no transcript available` and stops. Most trading tutorial videos have auto-captions.
+
+**TradingView Desktop + MCP** *(for live validation only)* — without this, the pipeline still runs but all validation steps return `untestable — MCP not configured`. Claim extraction, classification, and reporting all still work. To enable live validation:
+
+1. Install [TradingView Desktop](https://www.tradingview.com/desktop/) and open it
+2. Enable remote debugging: launch TradingView with `--remote-debugging-port=9222` (or set it in the app's launch options)
+3. Install the TradingView MCP server — follow the setup at [github.com/tradingview/tradingview-mcp](https://github.com/tradingview/tradingview-mcp)
+4. Set `TRADINGVIEW_MCP_CMD` in your `.env` to the command that launches the MCP server
+
+**Strategy backtests are off by default.** `config.yml` has `strategy_backtest: false` in v1. If you run a strategy video without enabling it, the claim will be extracted and classified correctly but marked `untestable — test type disabled`. To enable: set `strategy_backtest: true` in `config.yml` and make sure the TradingView MCP is configured.
+
+---
+
 ## Try it
 
 ```bash
@@ -191,9 +214,9 @@ python -m agent_research_lab.telegram_bot
 
 **No API key needed by default.** The pipeline auto-detects an LLM backend in this order:
 
-1. The `claude` CLI on your PATH (Claude Code) — uses your existing subscription
+1. The `claude` CLI on your PATH ([Claude Code](https://claude.ai/code)) — uses your existing subscription, no key needed
 2. `ANTHROPIC_API_KEY` set — `pip install 'agent-research-lab[anthropic]'`
-3. `GEMINI_API_KEY` set — free tier works — `pip install 'agent-research-lab[gemini]'`
+3. `GEMINI_API_KEY` set — free tier works fine — `pip install 'agent-research-lab[gemini]'`
 
 For the Telegram bot, set `TELEGRAM_BOT_TOKEN` in `.env`. For live validation, set `TRADINGVIEW_MCP_CMD` to the command that launches your TradingView MCP. Without it, validation steps return `untestable — MCP not configured` and everything else still runs fine.
 
