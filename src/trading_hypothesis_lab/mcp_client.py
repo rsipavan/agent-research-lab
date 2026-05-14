@@ -129,7 +129,7 @@ class _StdioTransport(_Transport):
             self._proc = subprocess.Popen(
                 shlex.split(self._cmd, posix=False),
                 stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-                text=True, bufsize=1,  # line-buffered
+                text=True, encoding="utf-8", bufsize=1,  # line-buffered
             )
         except FileNotFoundError as e:
             raise McpError(f"could not launch the MCP server (`{self._cmd}`): {e}") from e

@@ -108,6 +108,7 @@ def _complete_claude_cli(system: str, prompt: str, *, model: str | None, timeout
             input=full,
             capture_output=True,
             text=True,
+            encoding="utf-8",
             timeout=timeout,
             check=False,
             env=env,
