@@ -1,24 +1,27 @@
 """Report building: Transcript + VideoSummary + ThesisSet + ValidationRuns -> Report.
 
 The report LEADS with "what this video is" (from the summarize step), then — if there
-was anything to validate — the per-claim verdicts.
+was anything to validate — per-claim findings structured around five questions:
+  1. What did the video claim?
+  2. What was actually testable?
+  3. What data was checked?
+  4. What happened?
+  5. Why did the system conclude this?
 
 The verdict for each claim (holds / partial / fails / untestable) is COMPUTED here by
-explicit rules — it is not asked of an LLM. The LLM is used only to write the
-human-readable narrative around the computed verdicts; if that call fails, we fall back
-to a template render and note it. The conclusion stays auditable either way.
+explicit rules — it is not asked of an LLM. Verdicts stay auditable even if the LLM
+backend is unavailable.
 
-See docs/decision_logic.md (Decision 0: what kind of video is this?) and
-docs/validation_logic.md (the verdict thresholds).
+See docs/decision_logic.md and docs/validation_logic.md.
 """
 
 from __future__ import annotations
 
-from . import llm
 from .config import Config
 from .types import (
     ClaimFinding,
     Report,
+    StrategyBacktestMetrics,
     ThesisSet,
     Transcript,
     ValidationRun,
@@ -30,6 +33,13 @@ from .types import (
 _MIN_N_TO_CONCLUDE = 10
 _HOLDS_RATE = 0.65
 _FAILS_RATE = 0.45
+
+_VERDICT_LABEL: dict[str, str] = {
+    "holds": "CONFIRMED",
+    "partial": "PARTIAL SUPPORT",
+    "fails": "NOT SUPPORTED",
+    "untestable": "UNTESTABLE",
+}
 
 
 # ---------------------------------------------------------------------------
@@ -46,7 +56,6 @@ def build(
     run_id: str,
 ) -> Report:
     """Full report: leads with the video summary, then the per-claim findings."""
-    # group runs by claim — each claim can have multiple ValidationRuns (one per timeframe)
     runs_by_claim: dict[str, list[ValidationRun]] = {}
     for r in runs:
         runs_by_claim.setdefault(r.claim_id, []).append(r)
@@ -59,15 +68,13 @@ def build(
 
     verdict_overall, overall_reason = _aggregate(findings)
     json_doc = _to_json(transcript, video_summary, findings, verdict_overall, overall_reason, run_id)
-    markdown = _to_markdown(transcript, video_summary, findings, verdict_overall, overall_reason, config)
+    markdown = _to_markdown(transcript, video_summary, findings, verdict_overall, overall_reason)
     return _report(transcript, video_summary, findings, verdict_overall, overall_reason, markdown, json_doc)
 
 
 def build_summary_only(transcript: Transcript, video_summary: VideoSummary, run_id: str) -> Report:
     """For videos that are, by nature, not claim-bearing (mindset/psychology, vlog,
-    promotion, off-topic, or anything the summarize step flagged as having no checkable
-    claims). We don't run claim extraction — the report is the summary plus an honest
-    'nothing to validate here, and why'."""
+    promotion, off-topic). Report is the summary plus an honest 'nothing to validate here'."""
     ct = video_summary.content_type
     reason = {
         "mindset_psychology": "this is a trader-psychology / mindset video — it makes no claims about market behavior that can be checked against data",
@@ -75,37 +82,42 @@ def build_summary_only(transcript: Transcript, video_summary: VideoSummary, run_
         "promotion": "this is primarily a promotional video (course / signals / community / prop firm) — there's no checkable market claim to validate",
         "other": "this video isn't about a checkable trading claim — there's nothing here to validate against market data",
     }.get(ct, "the summarize step found no checkable market claim in this video — there's nothing to validate")
-    overall_reason = reason
     json_doc = {
         "run_id": run_id,
         "video": _video_json(transcript),
         "video_summary": _summary_json(video_summary),
         "verdict_overall": "untestable",
-        "overall_reason": overall_reason,
+        "overall_reason": reason,
         "findings": [],
     }
-    md = _summary_section_md(transcript, video_summary, verdict_overall="untestable", overall_reason=overall_reason)
-    md += "\n" + _footer_md()
-    return _report(transcript, video_summary, [], "untestable", overall_reason, md, json_doc)
+    md = _summary_only_md(transcript, video_summary, reason)
+    return _report(transcript, video_summary, [], "untestable", reason, md, json_doc)
 
 
 def build_minimal(transcript: Transcript, video_summary: VideoSummary | None, run_id: str, reason: str) -> Report:
-    """For the no-transcript / transcript-too-short cases. Honest 'untestable' report."""
-    overall_reason = reason
+    """For the no-transcript / transcript-too-short cases."""
     json_doc = {
         "run_id": run_id,
         "video": _video_json(transcript),
         "video_summary": _summary_json(video_summary) if video_summary else None,
         "verdict_overall": "untestable",
-        "overall_reason": overall_reason,
+        "overall_reason": reason,
         "findings": [],
     }
-    md = (
-        f"# Research report — {transcript.title or transcript.url}\n\n"
-        f"**Overall verdict: untestable.** {overall_reason}\n\n"
-        f"_Source: {transcript.url}_\n\n" + _footer_md()
-    )
-    return _report(transcript, video_summary, [], "untestable", overall_reason, md, json_doc)
+    title = transcript.title or transcript.url
+    md = "\n".join([
+        f"# {title}",
+        "",
+        f"*{transcript.url}*",
+        "",
+        f"**Overall: UNTESTABLE** — {reason}",
+        "",
+        "---",
+        "",
+        _pipeline_md(),
+        _footer_md(),
+    ])
+    return _report(transcript, video_summary, [], "untestable", reason, md, json_doc)
 
 
 # ---------------------------------------------------------------------------
@@ -114,7 +126,6 @@ def build_minimal(transcript: Transcript, video_summary: VideoSummary | None, ru
 
 
 def _verdict_for_one(claim, run: ValidationRun) -> tuple[Verdict, str]:
-    """Verdict for ONE (claim, timeframe). The per-claim verdict aggregates across these."""
     if run.status == "error":
         return ("untestable",
                 run.result.removeprefix("untestable — ") if run.result.startswith("untestable")
@@ -126,33 +137,25 @@ def _verdict_for_one(claim, run: ValidationRun) -> tuple[Verdict, str]:
     if r is None:
         return "untestable", "validation produced no rate"
     if n < _MIN_N_TO_CONCLUDE:
-        return "partial", f"only {n} occurrence(s) in the tested window — observed rate {r:.0%}, but the sample is too small to conclude"
+        return "partial", f"only {n} occurrence(s) — rate {r:.0%}, sample too small to conclude"
     if r >= _HOLDS_RATE:
-        return "holds", f"the claimed behavior occurred {r:.0%} of the time over {n} occurrences"
+        return "holds", f"the claimed behavior occurred {r:.0%} of the time across {n} occurrences"
     if r < _FAILS_RATE:
-        return "fails", f"the claimed behavior occurred only {r:.0%} of the time over {n} occurrences"
-    return "partial", f"the claimed behavior occurred {r:.0%} of the time over {n} occurrences — roughly coin-flip; the claim overstates it"
+        return "fails", f"the claimed behavior occurred only {r:.0%} of the time across {n} occurrences"
+    return "partial", f"the claimed behavior occurred {r:.0%} of the time across {n} occurrences — roughly coin-flip; the claim overstates it"
 
 
 def _verdict_for(claim, runs: list[ValidationRun]) -> tuple[Verdict, str]:
-    """Aggregate per-timeframe verdicts into a single per-claim verdict.
-
-    The aggregation rule: if EVERY tested timeframe lands in the same bucket
-    (holds / fails / partial), the claim gets that verdict. If timeframes disagree —
-    e.g. holds on 1D but fails on 1H — the verdict is "partial" with a reason that
-    surfaces the disagreement. Disagreement is itself a finding worth reporting.
-    """
+    """Aggregate per-timeframe verdicts into a single per-claim verdict."""
     if claim.testable == "no":
         return ("untestable",
                 claim.reason_if_not or "the video makes this point but it isn't a checkable claim")
     if not runs:
         return "untestable", "claim was not validated"
 
-    # per-timeframe verdicts
     per_tf = [(_verdict_for_one(claim, r), r) for r in runs]
     verdicts = [v for (v, _), _ in per_tf]
 
-    # all timeframes untestable
     if all(v == "untestable" for v in verdicts):
         reasons = {reason for (_, reason), _ in per_tf}
         if len(reasons) == 1:
@@ -174,7 +177,6 @@ def _verdict_for(claim, runs: list[ValidationRun]) -> tuple[Verdict, str]:
         return "fails", "failed across " + ", ".join(_tf_brief(r) for _, r in valid)
     if all(v == "partial" for (v, _), _ in valid):
         return "partial", "partial across " + ", ".join(_tf_brief(r) for _, r in valid)
-    # timeframes disagree — surface that explicitly
     return "partial", "timeframes disagree — " + ", ".join(
         f"{r.timeframe}: {v} ({r.hit_rate:.0%} of {r.occurrences})"
         if r.hit_rate is not None and r.occurrences is not None
@@ -193,11 +195,11 @@ def _aggregate(findings: list[ClaimFinding]) -> tuple[Verdict, str]:
         return "fails", "the video's checkable claim(s) did not hold up against the data"
     if "holds" in verdicts and "fails" not in verdicts and "partial" not in verdicts:
         return "holds", "the video's checkable claim(s) held up against the data, with the usual caveats"
-    return "partial", "mixed: some checkable claims held up, others were partial or didn't — see per-claim findings"
+    return "partial", "mixed results — some claims held up, others were partial or didn't; see per-claim findings"
 
 
 # ---------------------------------------------------------------------------
-# rendering
+# JSON serialization (unchanged contract)
 # ---------------------------------------------------------------------------
 
 
@@ -217,7 +219,8 @@ def _report(transcript, video_summary, findings, verdict_overall, overall_reason
 
 
 def _video_json(transcript) -> dict:
-    return {"id": transcript.video_id, "url": transcript.url, "title": transcript.title, "channel": transcript.channel}
+    return {"id": transcript.video_id, "url": transcript.url,
+            "title": transcript.title, "channel": transcript.channel}
 
 
 def _summary_json(s: VideoSummary) -> dict:
@@ -253,6 +256,8 @@ def _to_json(transcript, video_summary, findings, verdict_overall, overall_reaso
                         "result": v.result,
                         "caveats": v.caveats,
                         "error": v.error,
+                        "strategy_backtest": _strategy_backtest_json(v.strategy_backtest),
+                        "pine_script_path": v.pine_script_path,
                     }
                     for v in f.validations
                 ],
@@ -262,126 +267,291 @@ def _to_json(transcript, video_summary, findings, verdict_overall, overall_reaso
     }
 
 
-def _summary_section_md(transcript, video_summary: VideoSummary | None, *, verdict_overall, overall_reason) -> str:
+def _strategy_backtest_json(sb: StrategyBacktestMetrics | None) -> dict | None:
+    if sb is None:
+        return None
+    return {
+        "net_profit": sb.net_profit,
+        "gross_profit": sb.gross_profit,
+        "total_trades": sb.total_trades,
+        "winning_trades": sb.winning_trades,
+        "win_rate": round(sb.win_rate, 3),
+        "max_drawdown": sb.max_drawdown,
+        "profit_factor": round(sb.profit_factor, 2),
+        "pine_script_file": sb.pine_script_path,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Markdown rendering — document-style, structured around 5 questions
+# ---------------------------------------------------------------------------
+
+
+def _to_markdown(
+    transcript: Transcript,
+    video_summary: VideoSummary | None,
+    findings: list[ClaimFinding],
+    verdict_overall: Verdict,
+    overall_reason: str,
+) -> str:
+    return "".join([
+        _header_md(transcript, video_summary, verdict_overall, overall_reason),
+        _video_section_md(video_summary, findings),
+        _claims_section_md(findings),
+        _overall_verdict_md(verdict_overall, overall_reason),
+        _pipeline_md(),
+        _footer_md(),
+    ])
+
+
+def _header_md(
+    transcript: Transcript,
+    video_summary: VideoSummary | None,
+    verdict_overall: Verdict,
+    overall_reason: str,
+) -> str:
     title = transcript.title or transcript.url
-    lines = [
-        f"# Research report — {title}",
-        "",
-        f"**Overall verdict: {verdict_overall}.** {overall_reason}",
-        "",
-        f"_Source: {transcript.url}_" + (f" — {transcript.channel}" if transcript.channel else ""),
-        "",
-        "## What this video is",
-        "",
-    ]
+    channel_bit = f" | {transcript.channel}" if transcript.channel else ""
+    vtype = video_summary.content_type if video_summary else "video"
+    label = _VERDICT_LABEL.get(verdict_overall, verdict_overall.upper())
+    return (
+        f"# {title}\n"
+        f"\n"
+        f"*{vtype}{channel_bit}*\n"
+        f"*{transcript.url}*\n"
+        f"\n"
+        f"**Overall: {label}** | {overall_reason}\n"
+        f"\n"
+        f"---\n"
+        f"\n"
+    )
+
+
+def _video_section_md(
+    video_summary: VideoSummary | None,
+    findings: list[ClaimFinding],
+) -> str:
+    lines = ["## What This Video Is", ""]
     if video_summary:
-        lines.append(f"- **Type:** `{video_summary.content_type}`")
-        lines.append(f"- **Topic:** {video_summary.topic}")
-        lines.append(f"- **Summary:** {video_summary.summary}")
-        lines.append(f"- **Has checkable market claims:** {'yes' if video_summary.has_checkable_claims else 'no'}")
+        lines.append(video_summary.summary)
+        lines.append("")
+        n_total = len(findings)
+        n_testable = sum(1 for f in findings if f.claim.testable != "no")
+        if n_total:
+            claim_word = "claim" if n_total == 1 else "claims"
+            lines.append(f"**{n_total} {claim_word} found** | {n_testable} testable")
+        else:
+            lines.append("**No checkable market claims found in this video.**")
     else:
-        lines.append("- (not summarized — transcript was unavailable)")
-    lines.append("")
-    return "\n".join(lines)
-
-
-def _to_markdown(transcript, video_summary, findings, verdict_overall, overall_reason, config: Config) -> str:
-    head = _summary_section_md(transcript, video_summary, verdict_overall=verdict_overall, overall_reason=overall_reason)
-    body = _claims_section_md(findings)
-    template = head + "\n" + body + _footer_md()
-    # Enrich with an LLM-written opening, around the COMPUTED verdicts. If no backend
-    # is available or the call fails, the template stands — verdicts are computed, not
-    # LLM-generated, so they're unaffected.
-    if llm.available_backend() is None:
-        return template
-    try:
-        intro = _llm_intro(transcript, video_summary, findings, verdict_overall, overall_reason, config)
-        if intro:
-            return intro.strip() + "\n\n---\n\n" + template
-    except Exception:  # noqa: BLE001
-        return template + "\n_(narrative synthesis unavailable; verdicts and data are unaffected)_\n"
-    return template
+        lines.append("*(Video could not be characterized — transcript was unavailable.)*")
+    lines += ["", "---", ""]
+    return "\n".join(lines) + "\n"
 
 
 def _claims_section_md(findings: list[ClaimFinding]) -> str:
     if not findings:
-        return "## Claims\n\nNo checkable market claims were found in this video — nothing to validate.\n\n"
-    lines = ["## Claims", "", "| # | Claim | Testable | Test | Verdict |", "|---|---|---|---|---|"]
-    for f in findings:
+        return "## Claims\n\nNo checkable market claims were found in this video.\n\n---\n\n"
+    total = len(findings)
+    parts = ["## Claims\n"]
+    for i, f in enumerate(findings, 1):
+        parts.append(_claim_card_md(f, i, total))
+    return "\n".join(parts)
+
+
+def _claim_card_md(finding: ClaimFinding, idx: int, total: int) -> str:
+    claim = finding.claim
+    lines: list[str] = []
+
+    # Heading
+    untestable_tag = " | UNTESTABLE" if claim.testable == "no" else ""
+    lines += [f"### Claim {idx} of {total}{untestable_tag}", "", f"> {claim.statement}", ""]
+
+    # Short-circuit: explicitly untestable
+    if claim.testable == "no":
+        reason = claim.reason_if_not or finding.verdict_reason or "not operationalizable as a mechanical test"
+        lines += [
+            "**Why this couldn't be tested:**",
+            reason,
+            "",
+            "---",
+            "",
+        ]
+        return "\n".join(lines)
+
+    valid_runs = [v for v in finding.validations if v.timeframe != "n/a"]
+    na_runs = [v for v in finding.validations if v.timeframe == "n/a"]
+
+    # Gate failure — no valid runs at all (e.g. no instrument, MCP down)
+    if not valid_runs and na_runs:
+        v = na_runs[0]
+        reason = (v.result or finding.verdict_reason or "").removeprefix("untestable — ")
+        label = _VERDICT_LABEL.get(finding.verdict, finding.verdict.upper())
+        lines += [
+            "**Why this couldn't be tested:**",
+            reason,
+            "",
+            f"**Verdict: {label}**",
+            "",
+            "---",
+            "",
+        ]
+        return "\n".join(lines)
+
+    sym = claim.instrument or "?"
+    tf_list = ", ".join(v.timeframe for v in valid_runs)
+
+    # ── Q3: What data was checked? ───────────────────────────────────────────
+    lines.append("**What was checked:**")
+    if claim.test_type == "strategy_backtest":
+        tf = claim.timeframe or "?"
         lines.append(
-            f"| {f.claim.id} | {_md_escape(f.claim.statement)} | {f.claim.testable} | "
-            f"{f.claim.test_type} | **{f.verdict}** |"
+            f"Full strategy backtest | {sym} | {tf} | "
+            f"Pine Script v6, TradingView strategy tester"
         )
-    lines += ["", "## Findings", ""]
-    for f in findings:
-        lines.append(f"### {f.claim.id} — {_md_escape(f.claim.statement)}")
+    elif len(valid_runs) == 1:
+        v = valid_runs[0]
+        occ_bit = f" | {v.occurrences:,} occurrences" if v.occurrences else ""
+        lines.append(f"{sym} | {v.timeframe}{occ_bit}")
+    else:
+        lines.append(f"{sym} | {len(valid_runs)} timeframes tested ({tf_list})")
+    lines.append("")
+
+    # ── Q4: What happened? ───────────────────────────────────────────────────
+    lines.append("**What happened:**")
+    if claim.test_type == "strategy_backtest":
+        sb_run = next((v for v in valid_runs if v.strategy_backtest is not None), None)
+        if sb_run and sb_run.strategy_backtest:
+            sb = sb_run.strategy_backtest
+            losing = sb.total_trades - sb.winning_trades
+            profit_str = f"{sb.net_profit:+,.2f}" if sb.net_profit is not None else "n/a"
+            lines.append(
+                f"{sb.total_trades} trades executed | "
+                f"Win rate: {sb.win_rate:.0%} ({sb.winning_trades} wins, {losing} losses) | "
+                f"Net profit: {profit_str} | "
+                f"Profit factor: {sb.profit_factor:.2f} | "
+                f"Max drawdown: {sb.max_drawdown:.2f}"
+            )
+            if sb.pine_script_path:
+                from pathlib import Path as _Path
+                fname = _Path(sb.pine_script_path).name
+                lines += ["", f"*Script: `{fname}` — load into TradingView Pine editor*"]
+        else:
+            v0 = valid_runs[0] if valid_runs else (na_runs[0] if na_runs else None)
+            lines.append(v0.result if v0 else "strategy synthesis did not produce results")
+    elif len(valid_runs) == 1:
+        v = valid_runs[0]
+        if v.hit_rate is not None and v.occurrences is not None:
+            lines.append(
+                f"{v.hit_rate:.0%} of {v.occurrences:,} occurrences showed the claimed behavior"
+            )
+        else:
+            lines.append(v.result or "validation ran but produced no rate")
+    else:
+        for v in valid_runs:
+            if v.hit_rate is not None and v.occurrences is not None:
+                n, r = v.occurrences, v.hit_rate
+                if n < _MIN_N_TO_CONCLUDE:
+                    conclusion = "sample too small"
+                elif r >= _HOLDS_RATE:
+                    conclusion = "confirmed"
+                elif r < _FAILS_RATE:
+                    conclusion = "not supported"
+                else:
+                    conclusion = "partial"
+                lines.append(f"- **{v.timeframe}:** {r:.0%} of {n:,} occurrences ({conclusion})")
+            else:
+                lines.append(f"- **{v.timeframe}:** {v.result}")
+    lines.append("")
+
+    # ── Q5: Why did the system conclude this? ────────────────────────────────
+    label = _VERDICT_LABEL.get(finding.verdict, finding.verdict.upper())
+    lines += [
+        f"**Verdict: {label}**",
+        finding.verdict_reason,
+        "",
+    ]
+
+    # Caveats
+    seen: set[str] = set()
+    all_caveats: list[str] = []
+    for v in valid_runs or na_runs:
+        for c in v.caveats:
+            if c not in seen:
+                seen.add(c)
+                all_caveats.append(c)
+    if all_caveats:
+        lines.append("**Caveats:**")
+        for c in all_caveats:
+            lines.append(f"- {c}")
         lines.append("")
-        lines.append(f"- **Verdict:** {f.verdict} — {f.verdict_reason}")
-        if f.claim.instrument or f.claim.timeframe:
-            lines.append(f"- **Scope:** {f.claim.instrument or '?'} · {f.claim.timeframe or 'timeframe unspecified'}")
-        # Multi-timeframe results table
-        valid_runs = [v for v in f.validations if v.timeframe != "n/a"]
-        if valid_runs:
-            lines += ["", "**Per-timeframe results:**", "", "| Timeframe | Status | Occurrences | Hit rate | Result |", "|---|---|---|---|---|"]
-            for v in valid_runs:
-                occ = "—" if v.occurrences is None else str(v.occurrences)
-                rate = "—" if v.hit_rate is None else f"{v.hit_rate:.0%}"
-                lines.append(
-                    f"| {v.timeframe} | {v.status} | {occ} | {rate} | {_md_escape(v.result)} |"
-                )
-            # consolidated caveats from all timeframes (deduped)
-            all_caveats: list[str] = []
-            seen: set[str] = set()
-            for v in valid_runs:
-                for c in v.caveats:
-                    if c not in seen:
-                        seen.add(c)
-                        all_caveats.append(c)
-            if all_caveats:
-                lines.append("")
-                lines.append("**Caveats:**")
-                for c in all_caveats:
-                    lines.append(f"  - {c}")
-        elif f.validations:
-            # all "n/a" timeframe — fundamental untestable (gate failure)
-            v = f.validations[0]
-            if v.result:
-                lines.append(f"- **Why:** {v.result.removeprefix('untestable — ')}")
-        elif f.claim.reason_if_not:
-            lines.append(f"- **Why not testable:** {f.claim.reason_if_not}")
-        lines.append("")
+
+    lines += ["---", ""]
     return "\n".join(lines)
+
+
+def _overall_verdict_md(verdict_overall: Verdict, overall_reason: str) -> str:
+    label = _VERDICT_LABEL.get(verdict_overall, verdict_overall.upper())
+    return (
+        f"## Overall: {label}\n"
+        f"\n"
+        f"{overall_reason}\n"
+        f"\n"
+        f"---\n"
+        f"\n"
+    )
+
+
+def _pipeline_md() -> str:
+    return (
+        "## How This Was Checked\n"
+        "\n"
+        "1. **Transcript fetched** from the video\n"
+        "2. **Video characterized** — content type, topic, whether it makes checkable claims\n"
+        "3. **Claims extracted** — each tagged with instrument, timeframe, and test type\n"
+        "4. **Validated** against real market data via TradingView MCP\n"
+        "5. **Verdicts computed** from the data — not LLM-judged\n"
+        "\n"
+        "---\n"
+        "\n"
+    )
 
 
 def _footer_md() -> str:
     return (
-        "---\n\n"
-        "_Generated by [agent-research-lab](https://github.com/rsipavan/agent-research-lab) — the video "
-        "is characterized first, then any checkable claims are validated against market data via the "
-        "TradingView MCP. Verdicts are computed from the data, not LLM-judged. See the trace for the "
-        "step-by-step._\n"
+        "*Generated by [agent-research-lab](https://github.com/rsipavan/agent-research-lab). "
+        "Verdicts are computed from market data, not LLM-judged. "
+        "See the trace file for step-by-step reasoning.*\n"
     )
 
 
-def _llm_intro(transcript, video_summary, findings, verdict_overall, overall_reason, config: Config) -> str:
-    payload = {
-        "video": transcript.title or transcript.url,
-        "what_it_is": None if not video_summary else
-            {"type": video_summary.content_type, "topic": video_summary.topic, "summary": video_summary.summary},
-        "overall": f"{verdict_overall} — {overall_reason}",
-        "claims": [
-            {"statement": f.claim.statement, "verdict": f.verdict, "reason": f.verdict_reason}
-            for f in findings
-        ],
-    }
-    system = (
-        "You write a 2-3 sentence opening for a research report on a trading YouTube video. You're "
-        "given what kind of video it is, the overall verdict, and each claim's COMPUTED verdict (do "
-        "not second-guess these — they came from market data, not from you). Open by saying what the "
-        "video is and what it claims, then how it held up. No hype, no hedging boilerplate, no 'it's "
-        "important to note'. Plain and direct."
+def _summary_only_md(transcript: Transcript, video_summary: VideoSummary, reason: str) -> str:
+    title = transcript.title or transcript.url
+    channel_bit = f" | {transcript.channel}" if transcript.channel else ""
+    ct = video_summary.content_type
+    return (
+        f"# {title}\n"
+        f"\n"
+        f"*{ct}{channel_bit}*\n"
+        f"*{transcript.url}*\n"
+        f"\n"
+        f"**Overall: UNTESTABLE** | {reason}\n"
+        f"\n"
+        f"---\n"
+        f"\n"
+        f"## What This Video Is\n"
+        f"\n"
+        f"{video_summary.summary}\n"
+        f"\n"
+        f"**Content type:** {ct}\n"
+        f"**Topic:** {video_summary.topic}\n"
+        f"\n"
+        f"This video doesn't contain checkable market claims — there's nothing to validate against market data.\n"
+        f"\n"
+        f"---\n"
+        f"\n"
+        + _pipeline_md()
+        + _footer_md()
     )
-    return llm.complete(system, str(payload), model=config.anthropic_model or None, max_tokens=400)
 
 
 def _md_escape(s: str) -> str:

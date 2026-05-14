@@ -1,0 +1,13 @@
+[
+  {
+    "id": "orb-c1",
+    "statement": "Opening Range Breakout (ORB): enter long when price closes above the first-15-minute high, enter short when price closes below the first-15-minute low. Stop at the opposite end of the opening range. Target 1.5x range size. Exit all positions by 3 PM. Strategy works consistently on SPY / liquid ETFs on a 5-minute chart.",
+    "instrument": "SPY",
+    "timeframe": "5",
+    "test_type": "strategy_backtest",
+    "testable": "yes",
+    "reason_if_not": null,
+    "confidence": 0.95,
+    "test_type_justification": "Claim describes a complete intraday trading strategy with defined entry, exit, stop, and target rules — requires full strategy backtest, not single-indicator validation."
+  }
+]

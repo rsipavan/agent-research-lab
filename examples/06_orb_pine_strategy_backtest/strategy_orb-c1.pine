@@ -1,0 +1,65 @@
+//@version=6
+strategy("Opening Range Breakout (ORB)", overlay=true,
+         default_qty_type=strategy.percent_of_equity, default_qty_value=10,
+         commission_type=strategy.commission.percent, commission_value=0.05,
+         slippage=1)
+
+// --- Inputs ---
+vol_ma_len = input.int(20,   "Volume MA Length",         minval=1)
+tp_mult    = input.float(1.5, "TP Multiplier (x range)", minval=0.1, step=0.1)
+
+// --- Session timestamps (America/New_York) ---
+t_open    = timestamp("America/New_York", year, month, dayofmonth,  9, 30)
+t_orb_end = timestamp("America/New_York", year, month, dayofmonth,  9, 45)
+t_exit    = timestamp("America/New_York", year, month, dayofmonth, 15,  0)
+
+// --- Per-day state ---
+var float orb_high = na
+var float orb_low  = na
+var bool  orb_set  = false
+var bool  traded   = false
+
+new_day = dayofmonth != dayofmonth[1] or month != month[1] or year != year[1]
+if new_day
+    orb_high := na
+    orb_low  := na
+    orb_set  := false
+    traded   := false
+
+// --- Build opening range (first 15 min: 9:30-9:44 ET) ---
+in_orb = time >= t_open and time < t_orb_end
+if in_orb
+    orb_high := na(orb_high) ? high : math.max(orb_high, high)
+    orb_low  := na(orb_low)  ? low  : math.min(orb_low,  low)
+
+if not orb_set and time >= t_orb_end and not na(orb_high)
+    orb_set := true
+
+// --- Volume filter ---
+vol_sma  = ta.sma(volume, vol_ma_len)
+high_vol = volume > vol_sma
+
+// --- Trade logic (one trade per day max) ---
+orb_range = orb_high - orb_low
+can_trade = orb_set and not traded and time < t_exit and strategy.position_size == 0
+
+if can_trade and close > orb_high and high_vol
+    strategy.entry("Long", strategy.long)
+    strategy.exit("Long Exit", from_entry="Long",
+                  limit=orb_high + tp_mult * orb_range, stop=orb_low)
+    traded := true
+
+if can_trade and close < orb_low and high_vol
+    strategy.entry("Short", strategy.short)
+    strategy.exit("Short Exit", from_entry="Short",
+                  limit=orb_low - tp_mult * orb_range, stop=orb_high)
+    traded := true
+
+// --- Hard time exit: flatten all by 15:00 ET ---
+if strategy.position_size != 0 and time >= t_exit
+    strategy.close_all(comment="Time Exit 15:00")
+
+// --- Visuals ---
+plot(orb_set ? orb_high : na, "ORB High", color=color.new(color.green, 0), style=plot.style_linebr, linewidth=1)
+plot(orb_set ? orb_low  : na, "ORB Low",  color=color.new(color.red,   0), style=plot.style_linebr, linewidth=1)
+bgcolor(in_orb ? color.new(color.yellow, 88) : na, title="ORB Window")

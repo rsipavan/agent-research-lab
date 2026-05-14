@@ -131,6 +131,24 @@ ValidationStatus = Literal["ok", "error", "insufficient_data"]
 
 
 @dataclass
+class StrategyBacktestMetrics:
+    """Metrics from a TradingView strategy tester run on a synthesized Pine Script.
+
+    Produced by pine.py when a strategy_backtest claim is successfully compiled and
+    tested. Attached to the ValidationRun so report.py can render it.
+    """
+
+    net_profit: float
+    gross_profit: float
+    total_trades: int
+    winning_trades: int
+    win_rate: float        # winning_trades / total_trades
+    max_drawdown: float
+    profit_factor: float   # gross_profit / |gross_loss|
+    pine_script_path: str  # absolute path to the .pine file on disk
+
+
+@dataclass
 class ValidationRun:
     """The result of running one test against real market data via the TradingView MCP.
 
@@ -154,6 +172,8 @@ class ValidationRun:
     result: str  # one-line summary of the finding
     caveats: list[str] = field(default_factory=list)
     error: str | None = None  # populated when status == "error"
+    strategy_backtest: StrategyBacktestMetrics | None = None  # set for strategy_backtest claims
+    pine_script_path: str | None = None  # absolute path to .pine file; set even on compile failures
 
 
 # ---------------------------------------------------------------------------

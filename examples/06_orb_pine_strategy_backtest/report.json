@@ -1,0 +1,42 @@
+{
+  "run_id": "orb-strategy-test-20260514",
+  "url": "https://www.youtube.com/watch?v=orb-strategy-test",
+  "verdict_overall": "mixed",
+  "findings": [
+    {
+      "claim_id": "orb-c1",
+      "statement": "Opening Range Breakout (ORB): enter long when price closes above the first-15-minute high, enter short when price closes below the first-15-minute low. Stop at the opposite end of the opening range. Target 1.5x range size. Exit all positions by 3 PM. Strategy works consistently on SPY / liquid ETFs on a 5-minute chart.",
+      "instrument": "SPY",
+      "timeframe": "5",
+      "test_type": "strategy_backtest",
+      "testable": "yes",
+      "validations": [
+        {
+          "test_type": "strategy_backtest",
+          "timeframe": "5",
+          "status": "ok",
+          "tradingview_query": "SPY 5 Pine Strategy (strategy tester)",
+          "data_summary": "SPY 5m: 66 trades, 48.5% win rate, net -4082.41, max drawdown 6560.31, PF 0.91",
+          "occurrences": 66,
+          "hit_rate": 0.485,
+          "result": "32/66 trades won (48.5%); net profit -4082.41; profit factor 0.91",
+          "caveats": [
+            "strategy tester results depend on the instrument, date range, and default capital settings in TradingView",
+            "commission 0.05% and 1-tick slippage modeled",
+            "past performance does not predict future results"
+          ],
+          "strategy_backtest": {
+            "net_profit": -4082.41,
+            "win_rate": 0.485,
+            "total_trades": 66,
+            "winning_trades": 32,
+            "max_drawdown": 6560.31,
+            "profit_factor": 0.91,
+            "pine_script_file": "strategy_orb-c1.pine"
+          },
+          "pine_script_path": "strategy_orb-c1.pine"
+        }
+      ]
+    }
+  ]
+}

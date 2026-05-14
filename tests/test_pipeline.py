@@ -243,6 +243,69 @@ def test_count_indicator_trigger_no_series_means_zero():
     assert occ == 0 and hits == 0
 
 
+def test_count_indicator_trigger_price_above_ma_bullish():
+    """'price above MA' (op=='>') should score hits when future > entry, not future < entry."""
+    closes = [100 + i for i in range(30)]
+    bars = _bars(closes)
+    # Price above MA only at indices 5, 15, 25 (MA well above price everywhere else)
+    ma = [closes[i] + 10.0 for i in range(30)]  # price BELOW MA everywhere
+    ma[5] = closes[5] - 1.0   # price above MA at index 5
+    ma[15] = closes[15] - 1.0  # price above MA at index 15
+    ma[25] = closes[25] - 1.0  # price above MA at index 25
+    occ, hits = validate_mod._count_indicator_trigger(bars, ma, ("price", ">", "MA"))
+    assert occ == 3
+    assert hits == 3  # uptrending closes -> future > entry every time (bullish continuation scored correctly)
+
+
+def test_compute_rsi_in_range():
+    """RSI values must be in [0, 100] and None for first period bars."""
+    import random
+    random.seed(42)
+    closes = [100.0 + random.gauss(0, 1) for _ in range(100)]
+    rsi = validate_mod._compute_rsi(closes, period=14)
+    assert len(rsi) == 100
+    assert all(v is None for v in rsi[:14])
+    assert all(0.0 <= v <= 100.0 for v in rsi[14:] if v is not None)
+
+
+def test_compute_rsi_all_up_approaches_100():
+    """Steadily rising prices should push RSI toward 100."""
+    closes = [float(i) for i in range(1, 51)]
+    rsi = validate_mod._compute_rsi(closes, period=14)
+    last = next(v for v in reversed(rsi) if v is not None)
+    assert last > 90.0
+
+
+def test_compute_sma_length_matches():
+    closes = [float(i) for i in range(50)]
+    sma = validate_mod._compute_sma(closes, period=20)
+    assert len(sma) == 50
+    assert all(v is None for v in sma[:19])
+    assert sma[19] == sum(range(20)) / 20
+
+
+def test_build_indicator_series_rsi():
+    closes = [100.0 + i * 0.1 for i in range(50)]
+    series = validate_mod._build_indicator_series(closes, ("rsi", "<", 30.0), "RSI below 30")
+    assert series is not None and len(series) == 50
+
+
+def test_build_indicator_series_ma():
+    closes = [100.0 + i for i in range(50)]
+    series = validate_mod._build_indicator_series(closes, ("price", ">", "MA"), "above the 20-day SMA")
+    assert series is not None and len(series) == 50
+    assert series[19] == sum(range(1, 21)) / 20 + 100.0 - 1.0  # SMA(1..20) = 10.5 + 100 - 1 etc
+    # Just confirm length and non-None for bars >= period
+    assert all(v is not None for v in series[19:])
+
+
+def test_parse_ma_period_extracts_correctly():
+    assert validate_mod._parse_ma_period("price above the 200-day EMA") == 200
+    assert validate_mod._parse_ma_period("50 SMA is key support") == 50
+    assert validate_mod._parse_ma_period("EMA 100 acts as resistance") == 100
+    assert validate_mod._parse_ma_period("moving average guides trend") == 200  # default
+
+
 # --------------------------------------------------------------------------- summarize parsing
 
 
@@ -305,21 +368,19 @@ def test_build_summary_only_leads_with_what_this_video_is():
     s = _summary(ct="mindset_psychology", has_claims=False)
     r = report_mod.build_summary_only(t, s, "vid-20260510T000000Z")
     assert r.verdict_overall == "untestable"
-    assert "What this video is" in r.markdown
+    assert "What This Video Is" in r.markdown
     assert "mindset_psychology" in r.markdown
     assert r.findings == []
     assert r.json["video_summary"]["content_type"] == "mindset_psychology"
 
 
 def test_build_full_report_includes_summary_section(monkeypatch):
-    # don't hit a live LLM for the narrative intro during tests
-    monkeypatch.setattr(report_mod.llm, "available_backend", lambda: None)
     t = Transcript("vid", "https://youtu.be/vid", "RSI Strategy", "ChannelX", "transcript text " * 30)
     s = _summary()
     thesis = ThesisSet("vid", claims=[
         Claim("c1", "RSI<30 on SPY 1D bounces", "SPY", "1D", "indicator_value_over_range", "no", "no instrument list", 0.6),
     ])
     r = report_mod.build(t, s, thesis, [], _config(), "vid-20260510T000000Z")
-    assert "What this video is" in r.markdown
+    assert "What This Video Is" in r.markdown
     assert "## Claims" in r.markdown
     assert r.json["video_summary"]["topic"] == "RSI thing"

@@ -1,0 +1,7 @@
+{
+  "video_id": "orb-strategy-test",
+  "content_type": "strategy_or_claim",
+  "topic": "Opening Range Breakout (ORB) intraday strategy — SPY 5-minute",
+  "summary": "The video describes a complete Opening Range Breakout strategy. The opening range is defined as the high and low of the first 15 minutes after market open (9:30-9:45 ET). Entries trigger on a close above/below the range with volume confirmation. Stops sit at the opposite end of the range; target is 1.5x the range width. All positions are closed by 3 PM.",
+  "has_checkable_claims": true
+}

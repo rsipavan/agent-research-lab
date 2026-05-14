@@ -27,28 +27,37 @@ from .types import Claim, ValidationRun
 _LEVEL_TOLERANCE = 0.003  # 0.3%
 # How far forward we look for the "claimed outcome" after a trigger, in bars.
 _FORWARD_WINDOW_BARS = 3
-# Maximum indicators allowed on a TradingView Free chart.
-_TV_FREE_INDICATOR_CAP = 2
 
 
-def run(claim: Claim, config: Config, mcp: McpClient) -> list[ValidationRun]:
+def run(
+    claim: Claim,
+    config: Config,
+    mcp: McpClient,
+    *,
+    timeframes_override: list[str] | None = None,
+) -> list[ValidationRun]:
     """Run the appropriate test for `claim` on each timeframe in scope. Always returns
     a non-empty list. Each element is one (claim, timeframe) result.
 
-    Timeframe selection: if `claim.timeframe` is set, ONLY that timeframe is used (the
-    video named one — respect it). Otherwise the claim is tested on every entry in
-    `config.test_timeframes`. Multi-timeframe evidence beats single-tf cherry-pick.
+    Timeframe selection priority:
+      1. `timeframes_override` (CLI --timeframe flag) — explicit user choice
+      2. `claim.timeframe` — the video named a specific timeframe
+      3. `config.test_timeframes` — the configured default set
 
-    If a claim is fundamentally untestable (no instrument, disabled test type,
-    strategy_backtest in v1, etc.), returns a single untestable run with timeframe="n/a"
-    — the gate applies regardless of timeframe and there's no point running it three times.
+    Multi-timeframe evidence beats single-tf cherry-pick. When timeframes disagree,
+    that disagreement is itself a finding.
+
+    If a claim is fundamentally untestable (no instrument, disabled test type, etc.),
+    returns a single untestable run with timeframe="n/a" — the gate applies regardless
+    of timeframe and there's no point running it three times.
     """
     # --- gates that mean "untestable on every timeframe" ---
     if claim.testable == "no":
         return [_untestable(claim, "n/a", "claim was classified as not testable")]
     if claim.test_type == "strategy_backtest":
-        return [_untestable(claim, "n/a",
-                            "this is a full strategy — needs a backtest engine (not in v1)")]
+        # strategy_backtest claims are routed to pine.run() in orchestrate.py before
+        # validate.run() is ever called — this gate is a safety net only.
+        return [_untestable(claim, "n/a", "strategy_backtest claims are handled by the Pine synthesis path")]
     if claim.test_type == "none":
         return [_untestable(claim, "n/a", "no test type maps to this claim")]
     if not config.test_type_enabled(claim.test_type):
@@ -67,7 +76,10 @@ def run(claim: Claim, config: Config, mcp: McpClient) -> list[ValidationRun]:
                             f'could not resolve "{instrument}" to a tradeable symbol')]
 
     # --- decide which timeframes to test ---
-    if claim.timeframe:
+    if timeframes_override:
+        timeframes = timeframes_override
+        timeframes_assumed = False
+    elif claim.timeframe:
         timeframes = [claim.timeframe]
         timeframes_assumed = False
     else:
@@ -122,18 +134,15 @@ def _test_indicator_value_over_range(
 ) -> ValidationRun:
     """Check a claim of the shape 'indicator X behaves like Y over timeframe Z'.
 
-    We pull the indicator series + OHLCV over the lookback window, identify every
-    occurrence of the trigger condition the claim describes, look at what price did
+    We pull OHLCV over the lookback window, compute the indicator in Python,
+    identify every occurrence of the trigger condition, look at what price did
     in the next _FORWARD_WINDOW_BARS bars, and report the hit rate.
     """
     indicator_name = _guess_indicator(claim.statement)
-    trigger = _guess_trigger(claim.statement)  # e.g. ("RSI", "<", 30) or ("price", "above", "EMA200")
+    trigger = _guess_trigger(claim.statement)  # e.g. ("rsi", "<", 30) or ("price", ">", "MA")
 
-    # Set up the chart and pull data.
     mcp.call("chart_set_symbol", {"symbol": symbol})
     mcp.call("chart_set_timeframe", {"timeframe": timeframe})
-    if indicator_name:
-        _ensure_indicator(indicator_name, mcp)
 
     ohlcv = mcp.call("data_get_ohlcv", {"summary": False, "limit": config.default_lookback_days})
     bars = _ohlcv_bars(ohlcv)
@@ -145,10 +154,8 @@ def _test_indicator_value_over_range(
             result=f"insufficient market data for {symbol} on {timeframe}", caveats=[],
         )
 
-    indicator_series = None
-    if indicator_name:
-        ind = mcp.call("data_get_indicator", {"name": indicator_name})
-        indicator_series = _indicator_values(ind)
+    closes = [b["close"] for b in bars]
+    indicator_series = _build_indicator_series(closes, trigger, claim.statement)
 
     occ, hits = _count_indicator_trigger(bars, indicator_series, trigger)
     if occ == 0:
@@ -311,22 +318,97 @@ def _ohlcv_bars(res) -> list[dict]:
     return [b for b in out if b["close"] is not None]
 
 
-def _indicator_values(res) -> list[float | None]:
-    if isinstance(res, dict):
-        for key in ("values", "series", "data", "study_values"):
-            arr = res.get(key)
-            if isinstance(arr, list):
-                return [_f(x.get("value") if isinstance(x, dict) else x) for x in arr]
-    if isinstance(res, list):
-        return [_f(x.get("value") if isinstance(x, dict) else x) for x in res]
-    return []
-
-
 def _f(x) -> float | None:
     try:
         return float(x)
     except (TypeError, ValueError):
         return None
+
+
+# ---------------------------------------------------------------------------
+# in-Python indicator computation (avoids reliance on the MCP indicator API)
+# ---------------------------------------------------------------------------
+
+
+def _compute_rsi(closes: list[float], period: int = 14) -> list[float | None]:
+    """Wilder's RSI. Returns None for bars before period+1."""
+    out: list[float | None] = [None] * len(closes)
+    if len(closes) < period + 1:
+        return out
+    gains, losses = [], []
+    for i in range(1, period + 1):
+        diff = closes[i] - closes[i - 1]
+        gains.append(max(diff, 0.0))
+        losses.append(max(-diff, 0.0))
+    avg_gain = sum(gains) / period
+    avg_loss = sum(losses) / period
+    for i in range(period, len(closes)):
+        if i > period:
+            diff = closes[i] - closes[i - 1]
+            avg_gain = (avg_gain * (period - 1) + max(diff, 0.0)) / period
+            avg_loss = (avg_loss * (period - 1) + max(-diff, 0.0)) / period
+        rs = avg_gain / avg_loss if avg_loss != 0 else float("inf")
+        out[i] = 100.0 - 100.0 / (1.0 + rs)
+    return out
+
+
+def _compute_sma(closes: list[float], period: int) -> list[float | None]:
+    """Simple moving average. Returns None for bars before the period."""
+    out: list[float | None] = [None] * len(closes)
+    for i in range(period - 1, len(closes)):
+        out[i] = sum(closes[i - period + 1: i + 1]) / period
+    return out
+
+
+def _compute_ema(closes: list[float], period: int) -> list[float | None]:
+    """Exponential moving average (EMA). Seeded with the first SMA."""
+    out: list[float | None] = [None] * len(closes)
+    if len(closes) < period:
+        return out
+    out[period - 1] = sum(closes[:period]) / period
+    k = 2.0 / (period + 1)
+    for i in range(period, len(closes)):
+        prev = out[i - 1]
+        if prev is None:
+            continue
+        out[i] = closes[i] * k + prev * (1.0 - k)
+    return out
+
+
+def _parse_ma_period(statement: str) -> int:
+    """Extract MA/EMA period from claim text (e.g. '200-day EMA', 'EMA 50'). Default 200."""
+    s = statement.lower()
+    m = re.search(r"(\d+)\s*[-\s]?\s*(?:day|week|period|bar)?\s*[-\s]?\s*(?:ema|sma|moving average)\b", s)
+    if m:
+        return int(m.group(1))
+    m = re.search(r"(?:ema|sma|moving average)\s*[-\s]?\s*(\d+)", s)
+    if m:
+        return int(m.group(1))
+    return 200
+
+
+def _build_indicator_series(
+    closes: list[float],
+    trigger: tuple,
+    statement: str,
+) -> list[float | None] | None:
+    """Compute an indicator series aligned with `closes` based on the trigger spec."""
+    subject, _op, value = trigger
+    if subject == "rsi":
+        return _compute_rsi(closes)
+    if subject == "price" and value == "MA":
+        period = _parse_ma_period(statement)
+        if "ema" in statement.lower():
+            return _compute_ema(closes, period)
+        return _compute_sma(closes, period)
+    if subject == "macd":
+        fast = _compute_ema(closes, 12)
+        slow = _compute_ema(closes, 26)
+        return [
+            (f - s) if f is not None and s is not None else None
+            for f, s in zip(fast, slow)
+        ]
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -437,12 +519,16 @@ def _count_indicator_trigger(bars, indicator_series, trigger) -> tuple[int, int]
         if not triggered:
             continue
         occ += 1
-        # "claimed outcome" proxy: price reversed/moved in the implied direction within the window.
-        # For an oversold/below trigger -> expect price UP; for above -> expect continuation UP; etc.
         entry = bars[i]["close"]
         future = bars[i + _FORWARD_WINDOW_BARS]["close"]
-        expect_up = (op == "<")  # crude: "below threshold" claims usually predict a bounce up
-        moved_as_claimed = (future > entry) if expect_up else (future > entry)  # v1: treat both as "up"
+        # Direction: "price above MA" claims bullish continuation (expect UP);
+        # "RSI below 30" claims oversold bounce (expect UP from below threshold).
+        # "RSI above 70" claims overbought reversal (expect DOWN from above threshold).
+        if subject == "price" and value == "MA":
+            expect_up = (op == ">")
+        else:
+            expect_up = (op == "<")
+        moved_as_claimed = (future > entry) if expect_up else (future < entry)
         if moved_as_claimed:
             hits += 1
     return occ, hits
@@ -490,46 +576,6 @@ def _untestable(claim: Claim, timeframe: str, reason: str) -> ValidationRun:
         tradingview_query="", data_summary="", occurrences=None, hit_rate=None,
         result=f"untestable — {reason}", caveats=[], error=reason,
     )
-
-
-def _ensure_indicator(indicator_name: str, mcp: McpClient) -> None:
-    """Make sure `indicator_name` is loaded on the chart, respecting TV's per-account
-    indicator cap. If already present, do nothing. If the chart is at the cap, remove
-    the oldest study to make room. Errors are swallowed — the worst case is the
-    indicator wasn't added, and the trigger-counter will skip bars with no value.
-    """
-    try:
-        state = mcp.call("chart_get_state", {})
-    except McpError:
-        # Couldn't read state — fall through to a naive add. Worst case the add fails
-        # silently and downstream sees no indicator series; handled by the counter.
-        try:
-            mcp.call("chart_manage_indicator", {"action": "add", "name": indicator_name})
-        except McpError:
-            pass
-        return
-
-    studies = state.get("studies", []) if isinstance(state, dict) else []
-    studies = [s for s in studies if isinstance(s, dict)]
-    if any(s.get("name") == indicator_name for s in studies):
-        return  # already loaded — nothing to do
-
-    if len(studies) >= _TV_FREE_INDICATOR_CAP:
-        # Remove the oldest study to make room. We can't tell which is "oldest" from
-        # state alone — TradingView returns them in the order they were added, so the
-        # first entry is the oldest. Defensive: only remove if we have a valid id.
-        oldest = studies[0]
-        oldest_id = oldest.get("id")
-        if oldest_id:
-            try:
-                mcp.call("chart_manage_indicator", {"action": "remove", "id": oldest_id})
-            except McpError:
-                pass  # if remove fails, the add below will likely fail too — that's fine
-
-    try:
-        mcp.call("chart_manage_indicator", {"action": "add", "name": indicator_name})
-    except McpError:
-        pass  # honest failure — counter will see no indicator series and skip bars
 
 
 def _query_str(symbol, timeframe, indicator, trigger) -> str:
