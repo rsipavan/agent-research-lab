@@ -551,7 +551,7 @@ def _claim_card_md(finding: ClaimFinding, idx: int, total: int, t: _Thresholds |
     # that reversing every entry and exit would have cleared the holds threshold.
     if finding.verdict == "fails" and "inverse signal detected" in finding.verdict_reason:
         lines += [
-            "> **Inverse Signal Detected**",
+            "> **Hypothesis Mutation**",
             "> This strategy lost consistently. Reversing every entry and exit — selling",
             "> where it buys, buying where it sells — had an estimated profit factor above",
             "> the holds threshold over the same period. This is an operationalization",
