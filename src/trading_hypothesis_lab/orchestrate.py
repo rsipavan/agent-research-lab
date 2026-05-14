@@ -397,22 +397,25 @@ def _parse_timeframes(raw: str) -> list[str]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    # Force UTF-8 stdout/stderr so reports render correctly regardless of the
-    # console codepage (Windows defaults to cp1252, which mangles em-dashes etc.).
-    # errors="replace" is the fallback: if a character truly can't be rendered,
-    # print a ? rather than crashing the whole run.
+    # Force UTF-8 stdout/stderr on Windows (default codepage is cp1252).
+    # PYTHONIOENCODING=utf-8:replace is the most reliable approach for piped
+    # processes; the reconfigure/buffer-wrap path is kept as an in-process
+    # backup for consoles that don't respect the env var.
     import io as _io
+    import os as _os
+    _os.environ.setdefault("PYTHONIOENCODING", "utf-8:replace")
     for stream_name in ("stdout", "stderr"):
         stream = getattr(sys, stream_name, None)
         if stream is None:
             continue
+        # reconfigure is preferred when available (Python 3.7+)
         if hasattr(stream, "reconfigure"):
             try:
                 stream.reconfigure(encoding="utf-8", errors="replace")
                 continue
-            except (AttributeError, OSError, ValueError):
+            except Exception:  # noqa: BLE001
                 pass
-        # Fallback for older Python / unusual consoles: wrap the buffer directly.
+        # Fallback: wrap the raw buffer directly
         if hasattr(stream, "buffer"):
             try:
                 setattr(sys, stream_name,
@@ -483,7 +486,14 @@ def main(argv: list[str] | None = None) -> int:
     except Exception as e:  # noqa: BLE001 - last-resort: never crash without saying why
         print(f"[error] unexpected failure: {e}", file=sys.stderr)
         return 2
-    print(report.markdown)
+    # Write through the raw buffer when available so Unicode always works,
+    # regardless of whether the stdout TextIOWrapper was successfully reconfigured.
+    out = report.markdown + "\n"
+    if hasattr(sys.stdout, "buffer"):
+        sys.stdout.buffer.write(out.encode("utf-8", errors="replace"))
+        sys.stdout.buffer.flush()
+    else:
+        sys.stdout.write(out)
     if report.run_id:
         print(
             f"\n(saved: runs/{report.run_id}/  ·  trace: traces/{report.run_id}.jsonl)",
