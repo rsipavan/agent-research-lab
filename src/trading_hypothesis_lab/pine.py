@@ -67,13 +67,19 @@ def run(
     except llm_mod.LlmUnavailable:
         return _failed(claim, "could not synthesize Pine Script — LLM unavailable")
 
-    # --- step 2: compile (with self-repair loop) ---
-    script, errors = _compile_and_fix(script, mcp, config)
-
-    # Write to disk regardless of compile result — even a broken script is useful for debugging.
-    pine_path: str | None = None
+    # Save the raw synthesis output immediately — before any compile attempts.
+    # This is the key crash-safety artifact: if the compile loop fails or the process
+    # dies mid-repair, draft_synthesis_<id>.pine always shows what the LLM produced.
     if out_dir is not None:
         out_dir.mkdir(parents=True, exist_ok=True)
+        (out_dir / f"draft_synthesis_{claim.id}.pine").write_text(script, encoding="utf-8")
+
+    # --- step 2: compile (with self-repair loop) ---
+    script, errors = _compile_and_fix(script, mcp, config, draft_dir=out_dir, claim_id=claim.id)
+
+    # Write the final script to disk regardless of compile result.
+    pine_path: str | None = None
+    if out_dir is not None:
         file_path = out_dir / f"strategy_{claim.id}.pine"
         file_path.write_text(script, encoding="utf-8")
         pine_path = str(file_path.resolve())
@@ -253,10 +259,15 @@ def _compile_and_fix(
     mcp: McpClient,
     config: Config,
     max_retries: int = _MAX_COMPILE_RETRIES,
+    *,
+    draft_dir: Path | None = None,
+    claim_id: str = "c0",
 ) -> tuple[str, list[str]]:
     """Compile `script` via MCP, fix errors with LLM up to `max_retries` times.
 
     Returns (final_script, errors). If errors is empty, the script compiled cleanly.
+    If draft_dir is provided, each failed fix attempt is saved as
+    draft_fix_{claim_id}_{n}.pine so the full repair trajectory is inspectable.
     """
     for attempt in range(max_retries + 1):
         errors = _compile_once(script, mcp)
@@ -269,6 +280,11 @@ def _compile_and_fix(
             script = _fix_script(script, errors, config)
         except (llm_mod.LlmUnavailable, llm_mod.LlmError):
             break
+        # Save the post-fix draft so the repair trajectory is visible on disk.
+        if draft_dir is not None:
+            (draft_dir / f"draft_fix_{claim_id}_{attempt + 1}.pine").write_text(
+                script, encoding="utf-8"
+            )
     return script, errors
 
 
