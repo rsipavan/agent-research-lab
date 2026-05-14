@@ -115,33 +115,57 @@ def run(
         )
 
     # --- step 3: resolve symbol and run backtest ---
-    # Try the claim's timeframe first, then fall back to wider frames if 0 trades.
-    # Free TradingView only shows ~5 000 bars, so short timeframes have very little
-    # history. 15m → 1H → 1D gives progressively more data without changing the
-    # instrument, and the strategy logic is timeframe-agnostic (RSI + price swings).
-    # Both claim format (15m, 1H, 4H, 1D) and TV-native format (15, 60, 240, D).
+    # Try the claim's primary timeframe first, then fall back through wider timeframes.
+    # If all timeframes return 0 trades, try alternate instruments before giving up.
+    # Crypto RSI divergence setups (RSI<30) are rare on BTC; ETH oscillates more.
     _TF_FALLBACKS = {
         "1m": "5m",  "5m": "15m",  "15m": "1H",  "1H": "4H",  "4H": "1D",
         "1":  "5",   "5":  "15",   "15":  "60",  "60": "240", "240": "D",
     }
+    # Instrument fallback: only used when the primary instrument fires 0 trades on
+    # all timeframes. Keeps the claim instrument category (crypto → crypto, stock → stock).
+    _INSTRUMENT_FALLBACKS: dict[str, list[str]] = {
+        "BTCUSDT": ["BINANCE:ETHUSD", "COINBASE:ETHUSD"],
+        "BITCOIN": ["BINANCE:ETHUSD"],
+        "BTC":     ["BINANCE:ETHUSD"],
+    }
+
     tried_timeframes = [timeframe]
     metrics: StrategyBacktestMetrics | None = None
     actual_tf = timeframe
+    actual_instrument = instrument
     last_mcp_err: McpError | None = None
 
-    for tf_attempt in tried_timeframes:
-        try:
-            metrics = _run_backtest(instrument, tf_attempt, mcp)
-        except McpError as e:
-            last_mcp_err = e
-            break
-        if metrics is not None:
-            actual_tf = tf_attempt
-            break
-        # 0 trades — try next wider timeframe once
-        next_tf = _TF_FALLBACKS.get(tf_attempt)
-        if next_tf and next_tf not in tried_timeframes:
-            tried_timeframes.append(next_tf)
+    def _try_instrument(sym: str) -> tuple[StrategyBacktestMetrics | None, str, McpError | None]:
+        """Try all timeframe fallbacks for `sym`. Returns (metrics, tf_used, last_err)."""
+        tfs = [timeframe]
+        m: StrategyBacktestMetrics | None = None
+        tf_used = timeframe
+        err: McpError | None = None
+        for tf in tfs:
+            try:
+                m = _run_backtest(sym, tf, mcp)
+            except McpError as e:
+                err = e
+                break
+            if m is not None:
+                tf_used = tf
+                break
+            nxt = _TF_FALLBACKS.get(tf)
+            if nxt and nxt not in tfs:
+                tfs.append(nxt)
+        tried_timeframes[:] = tfs  # propagate for error reporting
+        return m, tf_used, err
+
+    metrics, actual_tf, last_mcp_err = _try_instrument(instrument)
+
+    if metrics is None and last_mcp_err is None:
+        # All timeframes on primary instrument gave 0 trades — try alternates
+        for alt in _INSTRUMENT_FALLBACKS.get(instrument.upper().replace("BINANCE:", ""), []):
+            metrics, actual_tf, last_mcp_err = _try_instrument(alt)
+            if metrics is not None or last_mcp_err is not None:
+                actual_instrument = alt
+                break
 
     if last_mcp_err is not None:
         return ValidationRun(
@@ -194,15 +218,20 @@ def run(
         )
 
     win_rate_pct = f"{metrics.win_rate:.0%}"
-    tf_note = f" (fell back from {timeframe})" if actual_tf != timeframe else ""
+    notes: list[str] = []
+    if actual_tf != timeframe:
+        notes.append(f"fell back from {timeframe}")
+    if actual_instrument != instrument:
+        notes.append(f"fell back from {instrument}")
+    tf_note = f" ({', '.join(notes)})" if notes else ""
     return ValidationRun(
         claim_id=claim.id,
         test_type="strategy_backtest",
         timeframe=actual_tf,
         status="ok",
-        tradingview_query=f"{instrument} {actual_tf} Pine Strategy (strategy tester){tf_note}",
+        tradingview_query=f"{actual_instrument} {actual_tf} Pine Strategy (strategy tester){tf_note}",
         data_summary=(
-            f"{instrument} {actual_tf}: {metrics.total_trades} trades, "
+            f"{actual_instrument} {actual_tf}: {metrics.total_trades} trades, "
             f"{win_rate_pct} win rate, net {metrics.net_profit:+.2f}, "
             f"max drawdown {metrics.max_drawdown:.2f}, PF {metrics.profit_factor:.2f}"
         ),
