@@ -88,32 +88,22 @@ Timeframe priority: `--timeframe` CLI flag > claim-extracted timeframe > config 
 
 ## Pine Script compile-repair loop
 
-`pine.py`'s `_compile_and_fix()` loop is worth explaining separately because its design reflects a specific choice about where to put trust.
+Here's something I learned building this: you can't just ask an LLM to write Pine Script and trust the output. Not because the model is bad at it — it's actually pretty good — but because "pretty good" isn't the same as "compiles and runs correctly on TradingView." There's always some gap between what the model generates and what the compiler accepts.
 
-The loop:
-1. Set source via MCP → smart compile → read errors
-2. If no errors: return the script
-3. If errors remain and retries are available: LLM fix call → loop
-4. If errors persist after all retries: return the script with the error list — caller marks the run as `insufficient_data`, file is still saved, trace logs what happened
+The naive fix is to just retry until it works. But that creates a different problem: what if it never works? You can't have a pipeline that hangs indefinitely on one bad script.
 
-The key design choice: **the goal was not "trust the model to produce valid Pine." The goal was "design a workflow where model failures become observable and recoverable."**
+So the compile-repair loop in `pine.py` works like this:
 
-This changes what matters:
+1. Send the script to TradingView via MCP → compile → read back the errors
+2. If it compiled clean, return it
+3. If there are errors and retries remain, send the error list back to the LLM and ask for a targeted fix → loop
+4. If it still fails after 3 attempts, stop — save what we have, mark the run as `insufficient_data`, log exactly what went wrong
 
-- The LLM synthesizing imperfect Pine on the first pass is expected and fine — the compile loop catches it
-- Bounded retries (max 3) mean a bad script never blocks a run indefinitely
-- Explicit failure states (`pine_max_retries`, `pine_compile_error`) mean the system reports what happened precisely — not "error," but which failure mode, at which step
-- The `.pine` file is written to disk regardless of compile outcome — you can inspect, fix, and re-run manually
-- The trace logs each fix attempt with timing
+The important thing is step 4. A lot of systems would either crash here or silently return something misleading. This one stops, names the failure mode precisely (`pine_max_retries` or `pine_compile_error`), saves the `.pine` file to disk so you can inspect it yourself, and writes a trace entry with timing. The run continues — the rest of the report still builds, the strategy claim just gets an honest "couldn't compile" verdict.
 
-In practice, the Claude CLI backend has been more stable than the standard API for iterative repair because it:
-- Preserves intent during repairs (makes localized fixes rather than rewriting entire scripts)
-- Handles multi-turn compiler feedback chains more reliably
-- Maintains architectural consistency across retries (e.g., doesn't silently drop stop-loss rules to fix a compile error)
+That's the real design choice: **the goal was never "trust the model to write valid Pine." It was "build a system where the model's failures are caught, named, and recoverable — not hidden."**
 
-But that's a secondary observation. The primary design is that **even if the synthesis model performs poorly, the system architecture ensures the failure is caught, named, logged, and recoverable** — not silently swallowed or misleadingly reported as a success.
-
-This same principle governs the broader pipeline: synthesis is separated from validation so that a model's output quality is never the last line of defense.
+One thing worth noting from running this in practice: the Claude CLI backend handles iterative repair better than I expected. It tends to make localized fixes rather than rewriting the whole script, which matters — a full rewrite can silently drop rules (like stop-loss conditions) while fixing an unrelated syntax error. The CLI also holds architectural intent better across multiple fix rounds. That said, this is a secondary observation. The architecture is designed to work regardless of which model is underneath.
 
 ## Why these boundaries
 
