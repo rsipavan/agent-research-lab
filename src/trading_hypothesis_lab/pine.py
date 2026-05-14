@@ -278,7 +278,7 @@ def _synthesize(
     )
 
     try:
-        result = llm_mod.complete(system, prompt, max_tokens=4000, timeout=600)
+        result = llm_mod.complete(system, prompt, model=config.synthesize_model or None, max_tokens=4000, timeout=600)
     except llm_mod.LlmError as e:
         raise PineSynthesisError(str(e)) from e
 
@@ -417,7 +417,7 @@ def _fix_script(script: str, errors: list[str], config: Config) -> str:
         "You are a Pine Script v5 expert fixing compilation errors. "
         "Output ONLY the corrected Pine Script code block, nothing else."
     )
-    result = llm_mod.complete(system, prompt, max_tokens=4000, timeout=180)
+    result = llm_mod.complete(system, prompt, model=config.synthesize_model or None, max_tokens=4000, timeout=180)
     result = result.strip()
     if result.startswith("```"):
         result = re.sub(r"^```\w*\n?", "", result)

@@ -22,7 +22,8 @@ class Config:
     # secrets / env
     telegram_bot_token: str
     anthropic_api_key: str
-    anthropic_model: str
+    extract_model: str      # model for summarize + thesis.extract (classification tasks → Haiku)
+    synthesize_model: str   # model for pine synthesis + repair (code generation → Sonnet/Opus)
     telegram_allowlist: list[int]
     tradingview_mcp_url: str | None    # HTTP/SSE endpoint
     tradingview_mcp_cmd: str | None    # stdio: command that launches the MCP server
@@ -73,7 +74,10 @@ def load_config(config_path: Path | None = None) -> Config:
     return Config(
         telegram_bot_token=os.getenv("TELEGRAM_BOT_TOKEN", ""),
         anthropic_api_key=os.getenv("ANTHROPIC_API_KEY", ""),
-        anthropic_model=os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-6"),
+        # ANTHROPIC_MODEL is a global override — when set it applies to all steps.
+        # Otherwise each step uses its own model: Haiku for classification, Sonnet for synthesis.
+        extract_model=os.getenv("ANTHROPIC_MODEL") or os.getenv("EXTRACT_MODEL", "claude-haiku-4-5-20251001"),
+        synthesize_model=os.getenv("ANTHROPIC_MODEL") or os.getenv("SYNTHESIZE_MODEL", "claude-sonnet-4-6"),
         telegram_allowlist=allowlist,
         tradingview_mcp_url=os.getenv("TRADINGVIEW_MCP_URL") or None,
         tradingview_mcp_cmd=os.getenv("TRADINGVIEW_MCP_CMD") or None,

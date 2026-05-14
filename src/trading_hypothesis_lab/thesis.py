@@ -123,7 +123,7 @@ def _call_llm(transcript: Transcript, summary: VideoSummary | None, config: Conf
     last_err: Exception | None = None
     for attempt in range(2):  # one retry
         try:
-            return llm.complete(_SYSTEM_PROMPT, user, model=config.anthropic_model or None, max_tokens=2000)
+            return llm.complete(_SYSTEM_PROMPT, user, model=config.extract_model or None, max_tokens=2000)
         except llm.LlmUnavailable:
             # No backend at all — not worth retrying; surface immediately.
             raise ExtractionError(

@@ -92,7 +92,7 @@ def _call_llm(transcript: Transcript, config: Config) -> str:
     last_err: Exception | None = None
     for attempt in range(2):
         try:
-            return llm.complete(_SYSTEM_PROMPT, user, model=config.anthropic_model or None, max_tokens=500)
+            return llm.complete(_SYSTEM_PROMPT, user, model=config.extract_model or None, max_tokens=500)
         except llm.LlmUnavailable:
             raise SummarizeError(
                 "no LLM backend available — install the `claude` CLI (no key needed), "

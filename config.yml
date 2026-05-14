@@ -1,12 +1,19 @@
 # trading-hypothesis-lab configuration.
 # Personal/secret values go in .env, not here. This file is committed.
 
+# Model routing — cheap/fast models for classification, capable models for code synthesis.
+# Override a single model for all steps: set ANTHROPIC_MODEL in .env.
+# Override per step: set EXTRACT_MODEL or SYNTHESIZE_MODEL in .env.
+# Defaults (used when neither override is set):
+#   extract (summarize + thesis.extract): claude-haiku-4-5-20251001
+#   synthesize (pine synthesis + repair): claude-sonnet-4-6
+
 # Which validation test types are enabled. Disabling one means claims that map
 # to it get verdict "untestable (test type disabled)".
 test_types:
   indicator_value_over_range: true   # check an indicator's values across a date range vs the claim
   level_zone_hit_rate: true          # check how often price respected a claimed level/zone
-  strategy_backtest: false           # NOT in v1 — needs a backtest engine; claims here are marked untestable
+  strategy_backtest: true            # LLM → Pine Script v5 → TradingView compile → strategy tester
 
 # Defaults applied when the video doesn't specify.
 defaults:
