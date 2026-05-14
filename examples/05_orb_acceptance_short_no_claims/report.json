@@ -1,0 +1,18 @@
+{
+  "run_id": "IuvsvMUon5k-20260514T072036Z",
+  "video": {
+    "id": "IuvsvMUon5k",
+    "url": "https://youtu.be/IuvsvMUon5k",
+    "title": null,
+    "channel": null
+  },
+  "video_summary": {
+    "content_type": "educational",
+    "topic": "Opening Range Breakout candle acceptance filter",
+    "summary": "The speaker describes a filter for Opening Range Breakout trades: only enter when buyers dominate and price builds value outside the first candle, indicating acceptance rather than absorption and reversal. The core idea is that waiting for this confirmation reduces false breakouts and stop-loss hits. No specific instruments, timeframes, or quantified win-rate thresholds are provided.",
+    "has_checkable_claims": false
+  },
+  "verdict_overall": "untestable",
+  "overall_reason": "the summarize step found no checkable market claim in this video \u2014 there's nothing to validate",
+  "findings": []
+}

@@ -48,6 +48,20 @@ EXAMPLES = [
         "relationship. With a TradingView MCP configured this produces a full validation run; "
         "without one, it shows the 'MCP not configured -> untestable' failure path.",
     ),
+    (
+        "04_alphainsider_promo_walkthrough",
+        "https://youtu.be/RzJIhCWj3rQ",
+        "A walkthrough promoting AlphaInsider + Alpaca for auto-trading. Tests the "
+        "`summary.skip_extraction` path for `promotion` content_type — the pipeline correctly "
+        "skips claim extraction rather than fabricating trading claims out of a software demo.",
+    ),
+    (
+        "05_orb_acceptance_short_no_claims",
+        "https://youtu.be/IuvsvMUon5k",
+        "A 99-word YouTube Short giving directional ORB-trading advice with no instrument, "
+        "no timeframe, no quantified threshold. Tests the `educational, has_checkable_claims=false` "
+        "short-circuit — the agent refuses to treat hand-wavy strategy talk as a testable claim.",
+    ),
 ]
 
 

@@ -211,8 +211,10 @@ def _write_run_artifacts(
         (run_dir / "summary.json").write_text(
             json.dumps(summary_dict, indent=2), encoding="utf-8",
         )
-    if thesis is not None:
-        thesis_dict = [
+    # Write thesis.json unconditionally — empty list when extraction was skipped
+    # (summary-only path) so every run bundle has the same file set.
+    thesis_dict = (
+        [
             {
                 "id": c.id,
                 "statement": c.statement,
@@ -226,9 +228,12 @@ def _write_run_artifacts(
             }
             for c in thesis.claims
         ]
-        (run_dir / "thesis.json").write_text(
-            json.dumps(thesis_dict, indent=2), encoding="utf-8",
-        )
+        if thesis is not None
+        else []
+    )
+    (run_dir / "thesis.json").write_text(
+        json.dumps(thesis_dict, indent=2), encoding="utf-8",
+    )
     (run_dir / "report.md").write_text(report.markdown, encoding="utf-8")
     (run_dir / "report.json").write_text(
         json.dumps(report.json, indent=2), encoding="utf-8",

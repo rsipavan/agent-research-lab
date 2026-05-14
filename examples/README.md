@@ -22,26 +22,28 @@ videos / changed transcripts).
 
 ## What you'll notice: every verdict here is `untestable` — and that's the point
 
-All three videos are "I tested a trading strategy" videos. None of them names the specific
-instruments or timeframes the backtest ran on ("the 100 most liquid crypto", "all these
-markets", "long time frames"). So the agent classifies their claims as **not independently
-checkable** and says so — with a specific reason per claim — rather than manufacturing a
-verdict from data that doesn't match what the video described.
-
-That refusal is the most important behavior in the pipeline. The common failure mode of
-"AI validates YouTube strategies" tooling is forcing every video into a test and reporting a
-number that means nothing. Here, `thesis.py` is allowed to return `no` ("this isn't a checkable
-claim") and `validate.py` is allowed to return `untestable` ("needs a backtest engine" /
-"no instrument named" / "MCP not configured") — and those are first-class outcomes, not errors.
+None of these videos produce a `holds` / `partial` / `fails` verdict. That's not the
+pipeline failing — it's the pipeline refusing to manufacture one. The common failure
+mode of "AI validates YouTube strategies" tooling is forcing every video into a test
+and reporting a number that means nothing. Here, both `summarize.py` (which routes
+the pipeline by content type), `thesis.py` (which can return "no, that's a take, not a
+checkable claim"), and `validate.py` (which can return "untestable — needs a backtest
+engine / no instrument named / MCP not configured") are allowed to honestly bail out.
+Those are first-class outcomes, not errors.
 See [`../docs/decision_logic.md`](../docs/decision_logic.md).
 
-The three examples cover three distinct *untestable* reasons:
+The five examples cover five distinct paths to `untestable`:
 
-| Example | Why untestable |
-|---|---|
-| `01_rsi_bollinger_tested_2025` | Strategy results can't be reproduced — the instrument universe ("100 most liquid crypto") and capital assumptions are never enumerated |
-| `02_rsi_profitable_or_overhyped` | Claims are strategy-shaped (full entry/exit rules + "is it profitable") → map to `strategy_backtest`, which is honestly out of scope in v1 |
-| `03_rsi_divergence_xauusd` | The backtest spans unnamed markets and unspecified timeframes; the headline numbers (68–70% win rate, ~37% growth) can't be checked against any single series |
+| Example | Path | Why untestable |
+|---|---|---|
+| `01_rsi_bollinger_tested_2025` | full extraction → claim untestable | Strategy results can't be reproduced — the instrument universe ("100 most liquid crypto") and capital assumptions are never enumerated |
+| `02_rsi_profitable_or_overhyped` | full extraction → strategy-shaped | Claims are strategy-shaped (full entry/exit rules + "is it profitable") → map to `strategy_backtest`, which is honestly out of scope in v1 |
+| `03_rsi_divergence_xauusd` | full extraction → MCP needed | The backtest spans unnamed markets and unspecified timeframes; the headline numbers (68–70% win rate, ~37% growth) can't be checked against any single series |
+| `04_alphainsider_promo_walkthrough` | **summary-only** (promotion) | Platform/course promo — by content type, there's nothing about market behavior to validate. The pipeline skips extraction entirely rather than fabricating claims from a software demo |
+| `05_orb_acceptance_short_no_claims` | **summary-only** (educational, no checkable claims) | A YouTube Short giving directional advice ("buyers dominating means acceptance") without any instrument, timeframe, or quantified threshold. The summarizer flags `has_checkable_claims: false` and the pipeline short-circuits |
+
+Examples #1–#3 walk the full pipeline; #4–#5 demonstrate the `summary.skip_extraction`
+short-circuit. Both are deliberate paths through the system.
 
 ## What's NOT shown here yet
 
