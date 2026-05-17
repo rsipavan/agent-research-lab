@@ -8,6 +8,8 @@ You give it a YouTube URL. It pulls the transcript, figures out what kind of vid
 
 It's not a trading bot. It doesn't generate signals or execute trades. The domain is trading content. The engineering pattern — deterministic evaluation, observable workflows, graceful degradation — applies to any autonomous research pipeline operating under uncertainty.
 
+**→ Read [`docs/REASONING.md`](docs/REASONING.md) for the deep-dive on the design choice that defines this system: why "untestable" is a first-class verdict, and why most autonomous validation systems get this wrong.**
+
 *Built by [R Sai Pavan](https://www.linkedin.com/in/sai-pavan-86635b23/) · saipavan.pilot1@gmail.com*
 
 ---
@@ -270,6 +272,7 @@ No live trading. No exchange connections. No strategy library. No "AI finds prof
 
 ## Docs
 
+- [`docs/REASONING.md`](docs/REASONING.md) — **start here** — why "untestable" is a first-class verdict, the design choice that defines this system
 - [`docs/decision_logic.md`](docs/decision_logic.md) — how the system decides what counts as a testable claim and which test type to run
 - [`docs/validation_logic.md`](docs/validation_logic.md) — what the validation actually does, what it can and can't conclude
 - [`docs/failure_handling.md`](docs/failure_handling.md) — every failure mode documented: no transcript, ambiguous claim, MCP error, compile failure — what happens and why
