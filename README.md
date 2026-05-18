@@ -2,13 +2,17 @@
 
 ![tests](https://github.com/rsipavan/TradingHypothesisLab/actions/workflows/test.yml/badge.svg)
 
+![Pipeline demo](demo.gif)
+
+*Live run of the pipeline on a real YouTube trading video: transcript fetch → claim extraction → validation → honest verdict. Above: a strategy that under-specifies its instrument gets classified `untestable` with the structural reason.*
+
 I got tired of watching trading videos that confidently claim a strategy "works consistently" with nothing to back it up. So I built a system that checks.
 
 You give it a YouTube URL. It pulls the transcript, figures out what kind of video it is, extracts any claims that could actually be tested against market data, and then tests them — with real data, through TradingView, using explicit rules. The report tells you what it found, how confident the numbers are, and exactly where the reasoning stopped if it couldn't conclude anything.
 
 It's not a trading bot. It doesn't generate signals or execute trades. The domain is trading content. The engineering pattern — deterministic evaluation, observable workflows, graceful degradation — applies to any autonomous research pipeline operating under uncertainty.
 
-**→ Read [`docs/REASONING.md`](docs/REASONING.md) for the deep-dive on the design choice that defines this system: why "untestable" is a first-class verdict, and why most autonomous validation systems get this wrong.**
+**→ Read [`docs/REASONING.md`](docs/REASONING.md) for the deep-dive on the design choice that defines this system: why "untestable" is a first-class verdict, and why most autonomous validation systems get this wrong.** Also published as an essay: [Why "untestable" is a first-class verdict](https://rsaipavan.substack.com/p/why-untestable-is-a-first-class-verdict).
 
 *Built by [R Sai Pavan](https://www.linkedin.com/in/sai-pavan-86635b23/) · saipavan.pilot1@gmail.com*
 
@@ -219,6 +223,30 @@ A few things I kept coming back to while building this:
 | [06 — ORB Pine strategy backtest](examples/06_orb_pine_strategy_backtest/) | Strategy claim | fails — 66 trades, 48.5% WR, PF 0.91 (net negative) |
 | [07 — ICT key levels framework](examples/07_ict_key_levels_educational/) | Educational framework | untestable — teaching a methodology, no specific claim |
 | [08 — SPY 200-day SMA support](examples/08_spy_200sma_support_holds/) | Indicator claim | **holds** — 73% of 52 occurrences, above 65% threshold |
+
+---
+
+## Run history (live)
+
+Aggregated outcomes across every video I've put through the pipeline. Updated as the corpus grows. The point of these numbers isn't to look impressive — it's to demonstrate the verdict distribution the design produces.
+
+| Metric | Count | % |
+|--------|-------|---|
+| Total videos processed | _TBD_ | 100% |
+| Videos producing a testable claim | _TBD_ | _TBD_% |
+| Verdict: `pass` (claim holds against data) | _TBD_ | _TBD_% |
+| Verdict: `fail` (claim contradicted by data) | _TBD_ | _TBD_% |
+| Verdict: `partial` (mixed evidence) | _TBD_ | _TBD_% |
+| Verdict: `untestable` (claim well-formed but unverifiable) | _TBD_ | _TBD_% |
+| Verdict: `error` (pipeline failure, recoverable next run) | _TBD_ | _TBD_% |
+
+**Top reasons for `untestable`:**
+- _TBD_ — strategy described without a specific instrument
+- _TBD_ — claim is a directional opinion (no falsifiable threshold)
+- _TBD_ — video is mindset / promotional content (no checkable claim)
+- _TBD_ — required input missing (timeframe, stop rule, etc.)
+
+The `untestable` plurality is expected and is the point. Most trading content is uncheckable. A system that produces verdicts for everything is producing fabrications.
 
 ---
 
